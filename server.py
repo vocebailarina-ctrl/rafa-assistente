@@ -29,6 +29,9 @@ def log(rec):
 @app.get('/', response_class=HTMLResponse)
 def index(): return FileResponse('index.html')
 
+@app.get('/logo.png')
+def logo(): return FileResponse('logo.png')
+
 @app.head('/')
 def head_ok(): return JSONResponse({'ok':True})
 
