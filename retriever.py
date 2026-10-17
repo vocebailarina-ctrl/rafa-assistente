@@ -3,6 +3,7 @@ from rank_bm25 import BM25Okapi
 from indexar import norm
 
 SYN = {  # expansão simples de consulta
+ 'mista':'turma mista idades misturadas mesclando kids 1 kids 2','misturad':'turma mista mesclando kids 1 kids 2','4 e 5 anos':'turma mista mesclando kids 1 kids 2 sentindo a turma','3 e 5':'turma mista mesclando','4 a 6':'turma mista mesclando kids 1 kids 2','planejamento':'guia de aplicacao planner planejamento express formula da aula trilha anual modulo',
  'sem material':'musicas cantadas cantiga aula coringa qualquer objeto nenhum material','nao tenho material':'musicas cantadas cantiga aula coringa','cantada':'musicas cantadas cantiga elefante borboletinha','cantiga':'musicas cantadas','que aula':'aula coringa musicas cantadas hora de brincar aula tematica','aula experimental':'musicas cantadas mini baby circuito hora de brincar',
  'certificado':'marcas da danca certificados conclusao','lembrancinha':'lacinho certificado marcas da danca maozinha','meninos':'menino soldadinho saltos reverence','menino':'meninos soldadinho','espelho':'autopercepcao imagem movimento','auxiliar':'assistente em sala auxiliar','horario':'manha tarde turma lista de interessados','drt':'registro profissional cref sated','mei':'cnpj cnae regularizar','sistema':'gestao matricula cobranca app digidanca','contrato':'advogado matricula taxa','ferias':'julho dezembro mensalidade calendario','playlist':'musicas drive link curso apostila','login':'kiwify acesso senha app','senha':'kiwify acesso login',
  'preco':'cobrar valor aula cobrança parceria porcentagem','cobrar':'preco valor parceria','valor':'preco cobrar',
@@ -25,9 +26,10 @@ class Retriever:
         return (n+' '+norm(extra)).split()
     def _age(s,q):
         n=norm(q)
-        for pat,a in AGE:
-            if re.search(pat,n): return a
-        return None
+        # "4 e 5 anos", "de 3 a 6 anos": aplica o padrão a cada número citado
+        n=re.sub(r'\b(\d|dois|tres|quatro|cinco|seis|sete|oito|nove|dez)\s*(e|a|ou|,)\s*(\d|dois|tres|quatro|cinco|seis|sete|oito|nove|dez)\s*anos', r'\1 anos \3 anos', n)
+        found={a for pat,a in AGE if re.search(pat,n)}
+        return found.pop() if len(found)==1 else None
     def search(s,q,k=25):
         toks=s._expand(q); scores=s.bm25.get_scores(toks)
         age=s._age(q)
