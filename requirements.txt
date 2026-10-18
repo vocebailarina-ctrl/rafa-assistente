@@ -2,3 +2,4 @@ fastapi
 uvicorn[standard]
 anthropic
 rank-bm25
+python-multipart

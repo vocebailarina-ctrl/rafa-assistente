@@ -70,14 +70,34 @@ def feedback(f:Fb):
     if f.code!=ACCESS: raise HTTPException(401)
     log({'session':f.session,'feedback':f.turn,'vote':f.vote,'comment':f.comment}); return {'ok':True}
 
+def _admin_ok(code): return code.strip()==ADMIN.strip()
+
+FORM='<meta charset=utf-8><style>body{font-family:system-ui;max-width:400px;margin:4rem auto;padding:0 1rem}input,button{font-size:1rem;padding:.6rem;width:100%;box-sizing:border-box;margin-top:.5rem}button{background:#cd7990;color:#fff;border:0;border-radius:8px}</style><h2>Painel — Rafa Assistente</h2><form method=post action=/admin><input type=password name=code placeholder="Código de administração" autofocus><button>Entrar</button></form>{err}'
+
 @app.get('/admin', response_class=HTMLResponse)
-def admin(code:str=''):
-    if code!=ADMIN: raise HTTPException(401)
+def admin_get(code:str=''):
+    if not code: return FORM.format(err='')
+    if not _admin_ok(code): return FORM.format(err='<p style="color:#b00">Código incorreto.</p>')
+    return _panel(code)
+
+@app.post('/admin', response_class=HTMLResponse)
+async def admin_post(request:Request):
+    form=await request.form(); code=str(form.get('code',''))
+    if not _admin_ok(code): return FORM.format(err='<p style="color:#b00">Código incorreto.</p>')
+    return _panel(code)
+
+@app.get('/admin/download')
+def admin_download(code:str=''):
+    if not _admin_ok(code): raise HTTPException(401)
+    if not os.path.exists(LOG): raise HTTPException(404,'sem registros ainda')
+    return FileResponse(LOG, filename=f'conversas-{dt.date.today().isoformat()}.jsonl', media_type='application/json')
+
+def _panel(code):
     rows=[json.loads(l) for l in open(LOG)] if os.path.exists(LOG) else []
     fb={r['feedback']:r for r in rows if 'feedback' in r}
     convs=[r for r in rows if 'q' in r]
     h=['<meta charset=utf-8><style>body{font-family:system-ui;max-width:900px;margin:2rem auto;padding:0 1rem;color:#222}.q{background:#fdf2f6;padding:.6rem .8rem;border-radius:8px;margin-top:1.4rem}.a{white-space:pre-wrap;padding:.6rem .8rem}.m{color:#888;font-size:.8rem}.bad{color:#b00}</style>',
-       f'<h1>Rafa Assistente — {len(convs)} respostas, {len(set(r["session"] for r in convs))} sessões, {sum(1 for r in fb.values() if r["vote"]>0)} 👍 / {sum(1 for r in fb.values() if r["vote"]<0)} 👎</h1>']
+       f'<h1>Rafa Assistente — {len(convs)} respostas, {len(set(r["session"] for r in convs))} sessões, {sum(1 for r in fb.values() if r["vote"]>0)} 👍 / {sum(1 for r in fb.values() if r["vote"]<0)} 👎</h1><p class=m><a href="/admin/download?code={code}">⬇️ Baixar todos os registros (.jsonl)</a> — baixe antes de cada atualização do site; o arquivo é apagado a cada novo deploy.</p>']
     for r in reversed(convs):
         v=fb.get(r.get('turn'))
         tag=('<b class=bad>👎 '+(v.get('comment') or '')+'</b>' if v and v['vote']<0 else '👍' if v else '')
