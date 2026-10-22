@@ -1,6 +1,7 @@
 import json, re, unicodedata, anthropic
 from rank_bm25 import BM25Okapi
 from indexar import norm
+from exercicios import Exercicios, EXCLUIR, PEDIU_EXCLUIDO
 
 SYN = {  # expansão simples de consulta
  'mais alunas':'marketing divulgacao boca a boca aula experimental indicacao google whatsapp instagram retencao plano rapido','alunas novas':'marketing divulgacao boca a boca aula experimental indicacao retencao','conseguir aluna':'marketing divulgacao boca a boca aula experimental indicacao retencao','encher a turma':'marketing divulgacao boca a boca aula experimental retencao','divulga':'marketing boca a boca google instagram aula experimental plano rapido','marketing':'divulgacao boca a boca aula experimental indicacao google whatsapp instagram retencao plano rapido',
@@ -22,6 +23,7 @@ class Retriever:
         s.chunks=json.load(open(path))
         s.bm25=BM25Okapi([c['norm'].split() for c in s.chunks])
         s.client=anthropic.Anthropic()
+        s.ex=Exercicios(s.chunks)
     def _expand(s,q):
         n=norm(q); extra=' '.join(v for k,v in SYN.items() if k in n)
         return (n+' '+norm(extra)).split()
@@ -33,13 +35,14 @@ class Retriever:
         return found.pop() if len(found)==1 else None
     def search(s,q,k=25):
         toks=s._expand(q); scores=s.bm25.get_scores(toks)
-        age=s._age(q)
+        age=s._age(q); pediu_exc=bool(re.search(PEDIU_EXCLUIDO,norm(q)))
         ranked=sorted(range(len(s.chunks)),key=lambda i:-scores[i])
         out=[]
         for i in ranked:
             c=s.chunks[i]
             if c['tipo'] in ('secundario','sistema'): continue
             if age and c['faixa'] not in COMPAT[age]: continue
+            if c['tipo']=='apostila' and not pediu_exc and re.search(EXCLUIR,norm(c['section'])): continue   # nunca entrega entrada/révérence sem pedido
             if c['tipo']=='artigo' and scores[i]<max(scores)*0.6: continue
             key=(c['doc'],c['section'])
             if sum(1 for _,x in out if (x['doc'],x['section'])==key)>=2: continue
@@ -58,3 +61,9 @@ class Retriever:
         return [cands[i][1] for i in seen[:top]]
     def retrieve(s,q,top=6):
         return s.rerank(q,s.search(q),top)
+
+    def exercicios(s,q):
+        """Pedido de exercício/sequência para uma idade -> (lista [(score,ex,exato)], idade)."""
+        age=s._age(q)
+        r,_=s.ex.buscar(q,age,top=2) if age else ([],[])
+        return r,age

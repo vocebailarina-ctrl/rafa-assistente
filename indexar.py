@@ -53,10 +53,16 @@ def chunk_doc(path, max_words=350):
                 cur.append(p); n+=w
             if cur: chunks.append((sec,'\n\n'.join(cur)))
     out=[]
+    cur_mod=None
     for i,(sec,body) in enumerate(chunks):
         if len(body.split())<25 and i>0: # merge tiny chunks into previous
             out[-1]['text']+='\n\n'+body; continue
-        out.append({'doc':os.path.basename(path).replace('.md',''),'title':title,'section':sec,'faixa':faixa,'tipo':tipo,'fonte':src,'i':i,'text':body})
+        fx=faixa
+        if os.path.basename(path).startswith('apostila-kids-modulos-a-h'):
+            mm=re.match(r'(?:Mód\.|Módulo)\s+([A-H])',sec)
+            if mm: cur_mod=mm.group(1)
+            if cur_mod: fx='5-6' if cur_mod in 'EFGH' else '3-4'   # A-D = 3-4 anos; E-H = 5-6 anos
+        out.append({'doc':os.path.basename(path).replace('.md',''),'title':title,'section':sec,'faixa':fx,'tipo':tipo,'fonte':src,'i':i,'text':body})
     return out
 
 if __name__=='__main__':

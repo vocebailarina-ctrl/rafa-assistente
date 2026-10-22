@@ -6,7 +6,7 @@ HERE=os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE); os.ch
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from pydantic import BaseModel
-from assistente import Assistente, ABERTURA, SUPORTE, SYSTEM
+from assistente import Assistente, ABERTURA, SUPORTE, SYSTEM, montar_mensagem
 
 ACCESS=os.environ.get('ACCESS_CODE','bailarina')
 ADMIN=os.environ.get('ADMIN_CODE','rafa-admin')
@@ -50,9 +50,8 @@ def chat(m:Msg):
     # contexto para a busca: pergunta atual + última pergunta (perguntas curtas de acompanhamento)
     qbusca=q if len(q.split())>5 or not hist else hist[-2]['content'][:300]+' '+q
     t0=time.time()
-    ctx=A.r.retrieve(qbusca,top=6)
-    blocks="\n\n".join(f"<trecho fonte=\"{c['title']}\" secao=\"{c['section']}\" faixa=\"{c['faixa']}\">\n{c['text']}\n</trecho>" for c in ctx)
-    msgs=hist+[{"role":"user","content":f"<trechos>\n{blocks}\n</trechos>\n\nPergunta da professora: {q}"}]
+    content,ctx,exs=montar_mensagem(A.r,q,qbusca)
+    msgs=hist+[{"role":"user","content":content}]
     try:
         r=A.c.messages.create(model="claude-sonnet-5-5",max_tokens=1200,thinking={"type":"between_tools"},system=SYSTEM,messages=msgs)
         txt="".join(b.text for b in r.content if b.type=="text")
