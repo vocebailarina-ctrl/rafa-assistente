@@ -42,7 +42,7 @@ button.send:disabled{opacity:.5}
     <img src="/logo.png" alt="Você Bailarina" style="width:120px;align-self:center;margin-bottom:4px"><h2 style="margin:0 0 4px;text-align:center">Oiê, professora!</h2>
     <p>Este é um teste fechado para assinantes. Digite seu nome e o código que você recebeu.</p>
     <input id="nome" placeholder="Seu nome" autocomplete="name">
-    <input id="code" placeholder="Código de acesso" autocomplete="off">
+    <input id="code" placeholder="Código de acesso" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
     <button class="send" style="padding:10px" onclick="entrar()">Entrar</button>
     <p id="gateerr" style="color:var(--bad)"></p>
   </div>
@@ -66,16 +66,22 @@ function md(t){ // markdown mínimo: **b**, *i*, listas, quebras
     else{if(inl){out+=`</${inl}>`;inl=null}out+=l+'\n'}}
   if(inl)out+=`</${inl}>`;return out.replace(/\n{2,}/g,'\n\n').trim();}
 function add(cls,html){const d=document.createElement('div');d.className='msg '+cls;d.innerHTML=html;main.appendChild(d);main.scrollTop=main.scrollHeight;return d}
-async function entrar(){const nome=document.getElementById('nome').value.trim(),code=document.getElementById('code').value.trim();
-  if(!nome||!code){document.getElementById('gateerr').textContent='Preencha nome e código.';return}
-  S.nome=nome;S.code=code;try{localStorage.setItem('rafa_s',JSON.stringify(S))}catch(e){}
+const ERR_COD='Código incorreto. Confira o código que você recebeu: letra maiúscula e minúscula fazem diferença.';
+async function conferir(code){try{const r=await fetch('/api/entrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});return r.ok?'ok':(r.status===401?'errado':'falha')}catch(e){return 'falha'}}
+async function entrar(){const nome=document.getElementById('nome').value.trim(),code=document.getElementById('code').value.trim(),err=document.getElementById('gateerr');
+  if(!nome||!code){err.textContent='Preencha nome e código.';return}
+  err.textContent='Conferindo…';const v=await conferir(code);
+  if(v==='errado'){err.textContent=ERR_COD;return}
+  if(v==='falha'){err.textContent='Não consegui conferir agora. Verifique a internet e tente de novo.';return}
+  err.textContent='';S.nome=nome;S.code=code;try{localStorage.setItem('rafa_s',JSON.stringify(S))}catch(e){}
   start();}
+function sair(msg){try{localStorage.removeItem('rafa_s');sessionStorage.setItem('rafa_err',msg)}catch(e){}location.reload()}
 async function start(){document.getElementById('gate')?.remove();form.hidden=false;document.getElementById('aviso').hidden=false;
   const r=await fetch('/api/abertura').then(r=>r.json());add('bot',md(r.texto));inp.focus();}
 async function enviar(ev){ev.preventDefault();const q=inp.value.trim();if(!q)return;inp.value='';btn.disabled=true;
   add('user',md(q));const t=add('bot typing','Pensando…');
   try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:S.session,code:S.code,message:q,nome:S.nome})});
-    if(r.status===401){t.remove();localStorage.removeItem('rafa_s');location.reload();return}
+    if(r.status===401){t.remove();sair('Seu código de acesso mudou ou expirou. Digite o código novo para continuar.');return}
     const j=await r.json();t.classList.remove('typing');t.innerHTML=md(j.resposta);
     if(j.turn){const m=document.createElement('div');m.className='meta';m.innerHTML=`Essa resposta ajudou? <button onclick="fb(this,'${j.turn}',1)">👍</button><button onclick="fb(this,'${j.turn}',-1)">👎</button>`;t.appendChild(m)}
   }catch(e){t.innerHTML='Não consegui responder agora. Tente de novo em um minuto.'}
@@ -86,7 +92,8 @@ async function fb(b,turn,v){const box=b.parentElement;[...box.querySelectorAll('
   const s=document.createElement('span');s.textContent=v>0?'Obrigada! 💗':'Anotado, obrigada. Vou aprender com isso.';box.appendChild(s);}
 inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit()}});
 inp.addEventListener('input',()=>{inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,120)+'px'});
-if(S.code&&S.nome)start();
+try{const m=sessionStorage.getItem('rafa_err');if(m){document.getElementById('gateerr').textContent=m;sessionStorage.removeItem('rafa_err')}}catch(e){}
+if(S.code&&S.nome){conferir(S.code).then(v=>{if(v==='errado'){try{localStorage.removeItem('rafa_s')}catch(e){};document.getElementById('gateerr').textContent='Seu código de acesso mudou. Digite o código novo para continuar.'}else start()})}
 </script>
 </body>
 </html>

@@ -18,7 +18,7 @@ CONCEITOS = {
  'temps lie':  (r'temps lie',                     r'temps lie'),
  'passe':      (r'\bpasse\b|equilibrio',          r'\bpasse\b|equilibrio'),
  'coreografia':(r'coreograf|apresentacao|espetaculo', r'coreograf'),
- 'pes':        (r'trabalho de pes|pezinho|dedos dos pes|forca nos pes', r'trabalho de pes|dedos dos pes|pes e posteriores'),
+ 'pes':        (r'trabalho de pes|pezinho|dedos dos pes|forca nos pes|\bpes? (ruim|ruins|fraco|fracos|mole|moles|torto|tortos)|pontear|esticar o pe|esticar os pes|pe esticado', r'trabalho de pes|dedos dos pes|pes e posteriores'),
  'postura':    (r'postura',                       r'postura'),
  'en dehors':  (r'en dehors|rotacao',             r'en dehors|rotacao'),
  'diagonal':   (r'diagonal|deslocamento',         r'diagonal|desloc'),
@@ -61,9 +61,10 @@ class Exercicios:
     def __init__(s, chunks): s.ex=carregar(chunks)
     def conceitos(s,q):
         n=norm(q); return [k for k,(pq,_) in CONCEITOS.items() if re.search(pq,n)]
-    def buscar(s,q,age,top=3):
-        """Retorna (lista de exercícios [(score,ex,exato)], conceitos). Só roda se houver idade + conceito/formato."""
-        n=norm(q); cons=s.conceitos(q)
+    def buscar(s,q,age,top=3,excluir=None):
+        """Retorna (lista de exercícios [(score,ex,exato)], conceitos). Só roda se houver idade + conceito/formato.
+        excluir: chaves (doc,section) já entregues nesta conversa (pedido de 'outra opção')."""
+        n=norm(q); cons=s.conceitos(q); exc=excluir or set()
         fmts=[k for k,(pq,_) in FORMATO.items() if re.search(pq,n)]
         if not age or not (cons or 'sequencia' in fmts): return [],cons
         if re.search(r'music|playlist|trilha sonora|cancao',n): return [],cons   # pergunta sobre música, não sobre exercício
@@ -80,10 +81,10 @@ class Exercicios:
                 if f!='sequencia' and re.search(FORMATO[f][1],e['titulo_norm']): sc+=1.5
                 if f=='sequencia' and re.search(r'sequencia',e['titulo_norm']): sc+=1
             return sc
-        res=[(score(e),e) for e in s.ex]
+        res=[(score(e),e) for e in s.ex if (e['doc'],e['section']) not in exc]
         res=[(sc,e) for sc,e in res if sc>0]
         if not cons:   # pedido genérico (sequência/circuito): sorteia entre os exercícios de centro/barra/diagonal/sequência da faixa
-            pool=[e for e in s.ex if e['faixa']==age and (pediu_exc or not re.search(EXCLUIR,e['titulo_norm']))
+            pool=[e for e in s.ex if (e['doc'],e['section']) not in exc and e['faixa']==age and (pediu_exc or not re.search(EXCLUIR,e['titulo_norm']))
                   and re.search(r'sequencia|centro|diagonal|barra|coreograf|salto|sautes|skips',e['titulo_norm'])]
             if fmts and 'sequencia' not in fmts: pool=[e for e in pool if any(re.search(FORMATO[f][1],e['titulo_norm']) for f in fmts)] or pool
             random.shuffle(pool); return [(1.0,e,True) for e in pool[:2]],cons

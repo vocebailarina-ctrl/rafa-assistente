@@ -9,7 +9,7 @@ SYN = {  # expansão simples de consulta
  'sem material':'musicas cantadas cantiga aula coringa qualquer objeto nenhum material','nao tenho material':'musicas cantadas cantiga aula coringa','cantada':'musicas cantadas cantiga elefante borboletinha','cantiga':'musicas cantadas','que aula':'aula coringa musicas cantadas hora de brincar aula tematica','aula experimental':'musicas cantadas mini baby circuito hora de brincar',
  'certificado':'marcas da danca certificados conclusao','lembrancinha':'lacinho certificado marcas da danca maozinha','meninos':'menino soldadinho saltos reverence','menino':'meninos soldadinho','espelho':'autopercepcao imagem movimento','auxiliar':'assistente em sala auxiliar','horario':'manha tarde turma lista de interessados','drt':'registro profissional cref sated','mei':'cnpj cnae regularizar','sistema':'gestao matricula cobranca app digidanca','contrato':'advogado matricula taxa','ferias':'julho dezembro mensalidade calendario','playlist':'musicas drive link curso apostila','login':'kiwify acesso senha app','senha':'kiwify acesso login',
  'preco':'cobrar valor aula cobrança parceria porcentagem','cobrar':'preco valor parceria','valor':'preco cobrar',
- 'birra':'choro chorar teimosia','autista':'autismo neurodivergente neurodivergencia tea','autismo':'neurodivergente tea sinais de atencao observar','neurodivergente':'autismo sinais de atencao psicomotricidade',
+ 'birra':'choro chorar teimosia','atencao':'concentracao foco dispersa brincadeira combinados','prestando atencao':'concentracao foco dispersa brincadeira combinados autoridade','nao presta':'atencao concentracao foco autoridade combinados','dispers':'atencao concentracao foco','agitad':'tonicidade atencao energia brincadeira','bagunca':'autoridade combinados atencao','pe ruim':'trabalho de pes forca dos pes dedos dos pes pointe','pes ruins':'trabalho de pes forca dos pes dedos dos pes pointe','autista':'autismo neurodivergente neurodivergencia tea','autismo':'neurodivergente tea sinais de atencao observar','neurodivergente':'autismo sinais de atencao psicomotricidade',
  'espetaculo':'apresentacao show roteiro tema','coreografia':'desenho coreografico deslocamento sequencia',
  'baby':'mini baby 2 anos 3 anos pequenas','bebe':'baby 2 anos','pais':'mae familia responsaveis','mae':'pais familia',
  'lembrancinha':'material lembranca presente mimo','datas':'comemorativas tematica dia das maes pascoa festa junina',
@@ -33,7 +33,8 @@ class Retriever:
         n=re.sub(r'\b(\d|dois|tres|quatro|cinco|seis|sete|oito|nove|dez)\s*(e|a|ou|,)\s*(\d|dois|tres|quatro|cinco|seis|sete|oito|nove|dez)\s*anos', r'\1 anos \3 anos', n)
         found={a for pat,a in AGE if re.search(pat,n)}
         return found.pop() if len(found)==1 else None
-    def search(s,q,k=25):
+    def search(s,q,k=25,excluir=None):
+        exc=excluir or set()
         toks=s._expand(q); scores=s.bm25.get_scores(toks)
         age=s._age(q); pediu_exc=bool(re.search(PEDIU_EXCLUIDO,norm(q)))
         ranked=sorted(range(len(s.chunks)),key=lambda i:-scores[i])
@@ -41,6 +42,7 @@ class Retriever:
         for i in ranked:
             c=s.chunks[i]
             if c['tipo'] in ('secundario','sistema'): continue
+            if (c['doc'],c['section']) in exc: continue   # já entregue: pedido de outra opção
             if age and c['faixa'] not in COMPAT[age]: continue
             if c['tipo']=='apostila' and not pediu_exc and re.search(EXCLUIR,norm(c['section'])): continue   # nunca entrega entrada/révérence sem pedido
             if c['tipo']=='artigo' and scores[i]<max(scores)*0.6: continue
@@ -59,11 +61,11 @@ class Retriever:
         idx=[int(x) for x in re.findall(r'\d+',txt) if int(x)<len(cands)]
         seen=[];[seen.append(i) for i in idx if i not in seen]
         return [cands[i][1] for i in seen[:top]]
-    def retrieve(s,q,top=6):
-        return s.rerank(q,s.search(q),top)
+    def retrieve(s,q,top=6,excluir=None):
+        return s.rerank(q,s.search(q,excluir=excluir),top)
 
-    def exercicios(s,q):
+    def exercicios(s,q,excluir=None):
         """Pedido de exercício/sequência para uma idade -> (lista [(score,ex,exato)], idade)."""
         age=s._age(q)
-        r,_=s.ex.buscar(q,age,top=2) if age else ([],[])
+        r,_=s.ex.buscar(q,age,top=2,excluir=excluir) if age else ([],[])
         return r,age

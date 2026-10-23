@@ -6,7 +6,9 @@ HERE=os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE); os.ch
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from pydantic import BaseModel
-from assistente import Assistente, ABERTURA, SUPORTE, SYSTEM, montar_mensagem
+from assistente import Assistente, ABERTURA, SUPORTE, SYSTEM, montar_mensagem, mensagem_trilha
+from trilhas import Trilhas, Fluxo, OUTRA
+from indexar import norm
 
 ACCESS=os.environ.get('ACCESS_CODE','bailarina')
 ADMIN=os.environ.get('ADMIN_CODE','rafa-admin')
@@ -16,7 +18,12 @@ app=FastAPI(title='Rafa Assistente')
 A=Assistente()
 HIST=collections.defaultdict(list)   # session -> [{"role","content"}] (sem trechos)
 USAGE=collections.defaultdict(int)   # (session, dia) -> msgs
+FL=Fluxo(Trilhas(A.r.chunks))         # aula completa a partir das trilhas
+SEEN=collections.defaultdict(set)    # session -> (doc,section) já entregues no assunto atual
+LASTQ={}                             # session -> consulta do assunto atual (para 'outra opção')
 
+class Entrada(BaseModel):
+    code: str
 class Msg(BaseModel):
     session: str; code: str; message: str; nome: str|None=None
 class Fb(BaseModel):
@@ -38,35 +45,59 @@ def head_ok(): return JSONResponse({'ok':True})
 @app.get('/api/abertura')
 def abertura(): return {'texto':ABERTURA}
 
+@app.post('/api/entrar')
+def entrar(e:Entrada):
+    # confere o código ANTES de abrir o chat (comparação exata: maiúscula conta)
+    if e.code.strip()!=ACCESS.strip(): raise HTTPException(401,'código inválido')
+    return {'ok':True}
+
 @app.post('/api/chat')
 def chat(m:Msg):
-    if m.code!=ACCESS: raise HTTPException(401,'código inválido')
+    if m.code.strip()!=ACCESS.strip(): raise HTTPException(401,'código inválido')
     q=m.message.strip()
     if not q or len(q)>1500: raise HTTPException(400,'mensagem vazia ou longa demais')
     day=dt.date.today().isoformat(); k=(m.session,day)
     if USAGE[k]>=MAXD: return {'turn':None,'resposta':f'Por hoje chegamos ao limite de perguntas deste teste. Amanhã eu volto! Se for urgente, fale com a Thay no {SUPORTE}.','fontes':[]}
     USAGE[k]+=1
     hist=HIST[m.session][-6:]
-    # contexto para a busca: pergunta atual + última pergunta (perguntas curtas de acompanhamento)
-    qbusca=q if len(q.split())>5 or not hist else hist[-2]['content'][:300]+' '+q
-    t0=time.time()
-    content,ctx,exs=montar_mensagem(A.r,q,qbusca)
+    t0=time.time(); modo='normal'
+    ant=next((h['content'] for h in reversed(hist) if h['role']=='user'),'')
+    res=FL.tratar(m.session,q,anterior=ant)
+    if res and res[0]=='perguntar':      # pergunta fixa (idade / está ensaiando?), sem chamar a IA
+        txt=res[1]; HIST[m.session]+=[{"role":"user","content":q},{"role":"assistant","content":txt}]
+        log({'session':m.session,'nome':m.nome,'q':q,'a':txt,'modo':'trilha-pergunta','seg':0})
+        return {'turn':None,'resposta':txt,'fontes':[]}
+    if res and res[0]=='aula':
+        w=res[2]; modo='trilha'; LASTQ.pop(m.session,None)
+        content=mensagem_trilha(res[1],q); ctx=[]; exs=[]
+        fontes=[f"{w['fonte']} · Semana {w['n']}"]
+    else:
+        FL.ult.pop(m.session,None)
+        outra=bool(OUTRA.search(norm(q))) and m.session in LASTQ
+        if outra:
+            qbusca=LASTQ[m.session]; modo='outra-opcao'
+        else:
+            # contexto para a busca: pergunta atual + última pergunta (perguntas curtas de acompanhamento)
+            qbusca=q if len(q.split())>5 or not hist else hist[-2]['content'][:300]+' '+q
+            SEEN[m.session]=set(); LASTQ[m.session]=qbusca
+        content,ctx,exs=montar_mensagem(A.r,q,qbusca,SEEN[m.session],outra)
+        SEEN[m.session]|={(c['doc'],c['section']) for c in ctx}|{(e['doc'],e['section']) for _,e,_ in exs}
+        fontes=sorted(set(c['title'] for c in ctx))
     msgs=hist+[{"role":"user","content":content}]
     try:
-        r=A.c.messages.create(model="claude-sonnet-5-5",max_tokens=1200,thinking={"type":"between_tools"},system=SYSTEM,messages=msgs)
+        r=A.c.messages.create(model="claude-sonnet-5-5",max_tokens=1600,thinking={"type":"between_tools"},system=SYSTEM,messages=msgs)
         txt="".join(b.text for b in r.content if b.type=="text")
     except Exception as e:
-        log({'session':m.session,'nome':m.nome,'q':q,'erro':str(e)})
+        log({'session':m.session,'nome':m.nome,'q':q,'erro':str(e),'modo':modo})
         return {'turn':None,'resposta':f'Tive um problema técnico agora. Tente de novo em um minuto ou fale com a Thay no {SUPORTE}.','fontes':[]}
     HIST[m.session]+= [{"role":"user","content":q},{"role":"assistant","content":txt}]
     turn=uuid.uuid4().hex[:10]
-    fontes=sorted(set(c['title'] for c in ctx))
-    log({'session':m.session,'nome':m.nome,'turn':turn,'q':q,'a':txt,'fontes':fontes,'seg':round(time.time()-t0,1)})
+    log({'session':m.session,'nome':m.nome,'turn':turn,'q':q,'a':txt,'fontes':fontes,'modo':modo,'seg':round(time.time()-t0,1)})
     return {'turn':turn,'resposta':txt,'fontes':fontes}
 
 @app.post('/api/feedback')
 def feedback(f:Fb):
-    if f.code!=ACCESS: raise HTTPException(401)
+    if f.code.strip()!=ACCESS.strip(): raise HTTPException(401)
     log({'session':f.session,'feedback':f.turn,'vote':f.vote,'comment':f.comment}); return {'ok':True}
 
 def _admin_ok(code): return code.strip()==ADMIN.strip()
@@ -75,14 +106,14 @@ FORM='<meta charset=utf-8><style>body{font-family:system-ui;max-width:400px;marg
 
 @app.get('/admin', response_class=HTMLResponse)
 def admin_get(code:str=''):
-    if not code: return FORM.format(err='')
-    if not _admin_ok(code): return FORM.format(err='<p style="color:#b00">Código incorreto.</p>')
+    if not code: return FORM.replace('{err}','')
+    if not _admin_ok(code): return FORM.replace('{err}','<p style="color:#b00">Código incorreto.</p>')
     return _panel(code)
 
 @app.post('/admin', response_class=HTMLResponse)
 async def admin_post(request:Request):
     form=await request.form(); code=str(form.get('code',''))
-    if not _admin_ok(code): return FORM.format(err='<p style="color:#b00">Código incorreto.</p>')
+    if not _admin_ok(code): return FORM.replace('{err}','<p style="color:#b00">Código incorreto.</p>')
     return _panel(code)
 
 @app.get('/admin/download')
