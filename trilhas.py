@@ -181,6 +181,8 @@ class Trilhas:
                 continue
             etapas.append({'titulo': f'{etapa}', 'ref': '', 'corpo': conteudo.lstrip('→ ').capitalize() if conteudo.startswith('→') else conteudo})
         fim = 'Fonte: ' + ' · '.join(sorted(fontes)) + '.\nQuer outra aula? É só pedir "outra" que eu te mando a da semana seguinte.'
+        if faixa == '3-4':
+            fim += '\nDia sem material? A Rafa também tem a aula coringa Músicas Cantadas, só com cantigas: é só me pedir "aula de músicas cantadas".'
         rodape.append(fim)
         partes = [f'**{titulo}**', intro]
         for et in etapas:
@@ -233,6 +235,23 @@ NOTA_BABY = ('A Trilha anual começa em 3 anos. Para a sua turma de 2 anos, esta
 ROTULO = {'3-4': '3 a 4 anos', '5-6': '5 a 6 anos', '7+': '7 anos ou mais'}
 
 
+NUM = {'dois': 2, 'tres': 3, 'quatro': 4, 'cinco': 5, 'seis': 6, 'sete': 7, 'oito': 8, 'nove': 9, 'dez': 10, 'onze': 11, 'doze': 12}
+PERG_IDADE = 'Me conta a idade da turma que eu te mando a aula da semana completa.'
+PERG_ENSAIO = 'Antes de eu te mandar a aula: a sua turma já está ensaiando para o espetáculo de fim de ano?'
+
+
+def idades_resposta(q):
+    """Resposta à pergunta da idade: aceita também número solto ('3 ou 4', '4', 'tres')."""
+    ids = idades(q)
+    if ids: return ids
+    out = set()
+    for t in re.findall(r'\d+|[a-z]+', norm(q)):
+        n = int(t) if t.isdigit() else NUM.get(t)
+        if n is None or not 2 <= n <= 14: continue
+        out.add('2-3' if n == 2 else '3-4' if n <= 4 else '5-6' if n <= 6 else '7+')
+    return out
+
+
 def resolver_faixa(ids):
     """{'2-3'} -> ('3-4', nota); idades misturadas -> ('mista', [faixas]); uma faixa -> (faixa, None); nada -> (None, None)."""
     if not ids: return None, None
@@ -267,7 +286,7 @@ class Fluxo:
             if re.search(r'ensai|espetaculo', nq) and not NAO.search(nq):
                 return s._entregar(sess, faixa, n, True, nota=nota)
             s.pend[sess] = {'etapa': 'ensaio', 'faixa': faixa, 'n': n, 'nota': nota}
-            return ('perguntar', 'Antes de eu te mandar a aula: a sua turma já está ensaiando para o espetáculo de fim de ano? '
+            return ('perguntar', PERG_ENSAIO + ' '
                     'Se estiver, te mando a aula da semana com aquecimento e ensaio; se não, te mando uma aula completa.')
         return s._entregar(sess, faixa, n, False, nota=nota)
 
@@ -280,10 +299,17 @@ class Fluxo:
                     'Se não souber, comece pela da mais nova: fica mais fácil para todas acompanharem.')
         return s._com_faixa(sess, f, q, hoje, nota=extra)
 
-    def tratar(s, sess, q, hoje=None, anterior=''):
-        """anterior: última mensagem da professora (para achar a idade quando ela não repete)."""
+    def tratar(s, sess, q, hoje=None, anterior='', bot_anterior='', usuarias=()):
+        """anterior: última mensagem da professora; bot_anterior: última resposta do assistente;
+        usuarias: mensagens anteriores da professora. Servem para retomar a conversa se o servidor reiniciou."""
         nq = norm(q)
         p = s.pend.get(sess)
+        if not p and bot_anterior.startswith(PERG_IDADE[:30]):
+            p = s.pend[sess] = {'etapa': 'idade'}
+        if not p and bot_anterior.startswith(PERG_ENSAIO[:30]):
+            f, nota = resolver_faixa(next((idades_resposta(u) for u in reversed(list(usuarias)) if idades_resposta(u)), set()))
+            if f and f != 'mista':
+                p = s.pend[sess] = {'etapa': 'ensaio', 'faixa': f, 'n': s.t.semana_hoje(f, hoje), 'nota': nota}
         if p and p['etapa'] == 'ensaio':
             if SIM.search(nq) and not NAO.search(nq): return s._entregar(sess, p['faixa'], p['n'], True, nota=p.get('nota'))
             if NAO.search(nq): return s._entregar(sess, p['faixa'], s.t.equivalente_sem_ensaio(p['faixa'], p['n']), False, nota=p.get('nota'))
@@ -295,7 +321,7 @@ class Fluxo:
             if re.search(r'mais velha|maior|segunda', nq): return s._com_faixa(sess, p['opcoes'][-1], q, hoje)
             s.pend.pop(sess, None)
         if p and p['etapa'] == 'idade':
-            ids = idades(q)
+            ids = idades_resposta(q)
             if ids: return s._por_idades(sess, ids, q, hoje)
             s.pend.pop(sess, None)
         u = s.ult.get(sess)
@@ -305,5 +331,5 @@ class Fluxo:
         ids = idades(q) or idades(anterior)
         if not ids:
             s.pend[sess] = {'etapa': 'idade'}
-            return ('perguntar', 'Me conta a idade da turma que eu te mando a aula da semana completa.')
+            return ('perguntar', PERG_IDADE)
         return s._por_idades(sess, ids, q, hoje)

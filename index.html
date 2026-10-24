@@ -66,6 +66,7 @@ button.send:disabled{opacity:.5}
 <script>
 const main=document.getElementById('main'),form=document.getElementById('form'),inp=document.getElementById('inp'),btn=document.getElementById('btn');
 let S={session:null,code:null,nome:null};
+const CTX={bot:'',perg:[]};   // contexto curto enviado a cada pergunta
 try{const s=localStorage.getItem('rafa_s');if(s)S=JSON.parse(s);}catch(e){}
 S.session=S.session||crypto.randomUUID();
 function md(t){ // markdown mínimo: **b**, *i*, listas, quebras
@@ -94,10 +95,11 @@ function sair(msg){try{localStorage.removeItem('rafa_s');sessionStorage.setItem(
 async function start(){document.getElementById('gate')?.remove();form.hidden=false;document.getElementById('aviso').hidden=false;
   const r=await fetch('/api/abertura').then(r=>r.json());botaoOuvir(add('bot',md(r.texto)),r.texto);inp.focus();}
 async function enviar(ev){ev.preventDefault();pararMic();const q=inp.value.trim();if(!q)return;inp.value='';btn.disabled=true;
+  const ctx={bot_anterior:CTX.bot,perguntas:CTX.perg.slice(-4)};CTX.perg.push(q);
   add('user',md(q));const t=add('bot typing','Pensando…');
-  try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:S.session,code:S.code,message:q,nome:S.nome})});
+  try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:S.session,code:S.code,message:q,nome:S.nome,...ctx})});
     if(r.status===401){t.remove();sair('Seu código de acesso mudou ou expirou. Digite o código novo para continuar.');return}
-    const j=await r.json();t.classList.remove('typing');t.innerHTML=j.aula?aulaHTML(j.aula):md(j.resposta);
+    const j=await r.json();CTX.bot=j.resposta||'';t.classList.remove('typing');t.innerHTML=j.aula?aulaHTML(j.aula):md(j.resposta);
     if(j.aula)t.querySelectorAll('button[data-i]').forEach(b=>{const e=j.aula.etapas[+b.dataset.i];b.onclick=()=>ouvir(b,e.titulo+'.\n'+e.corpo)});
     const m=botaoOuvir(t,j.resposta);
     if(j.turn){const f=document.createElement('span');f.innerHTML=`Essa resposta ajudou? <button onclick="fb(this,'${j.turn}',1)">👍</button><button onclick="fb(this,'${j.turn}',-1)">👎</button>`;m.appendChild(f)}

@@ -26,6 +26,7 @@ class Entrada(BaseModel):
     code: str
 class Msg(BaseModel):
     session: str; code: str; message: str; nome: str|None=None
+    bot_anterior: str|None=None; perguntas: list[str]|None=None   # contexto vindo da página (sobrevive a reinício do servidor)
 class Fb(BaseModel):
     session: str; code: str; turn: str; vote: int; comment: str|None=None
 
@@ -62,7 +63,10 @@ def chat(m:Msg):
     hist=HIST[m.session][-6:]
     t0=time.time(); modo='normal'
     ant=next((h['content'] for h in reversed(hist) if h['role']=='user'),'')
-    res=FL.tratar(m.session,q,anterior=ant)
+    bot_ant=next((h['content'] for h in reversed(hist) if h['role']=='assistant'),'') or (m.bot_anterior or '')[:2000]
+    usuarias=[h['content'] for h in hist if h['role']=='user'] or [x[:500] for x in (m.perguntas or [])[-4:]]
+    if not ant and usuarias: ant=usuarias[-1]
+    res=FL.tratar(m.session,q,anterior=ant,bot_anterior=bot_ant,usuarias=usuarias)
     if res and res[0]=='perguntar':      # pergunta fixa (idade / está ensaiando?), sem chamar a IA
         txt=res[1]; HIST[m.session]+=[{"role":"user","content":q},{"role":"assistant","content":txt}]
         log({'session':m.session,'nome':m.nome,'q':q,'a':txt,'modo':'trilha-pergunta','seg':0})
