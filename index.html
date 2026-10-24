@@ -103,7 +103,16 @@ let vozPT=null,falando=null;
 function escolherVoz(){if(!TTS)return;const vs=speechSynthesis.getVoices();
   vozPT=vs.find(v=>/pt[-_]BR/i.test(v.lang)&&/female|luciana|francisca|maria|feminina/i.test(v.name))||vs.find(v=>/pt[-_]BR/i.test(v.lang))||vs.find(v=>/^pt/i.test(v.lang))||null}
 if(TTS){escolherVoz();speechSynthesis.onvoiceschanged=escolherVoz}
-function textoFalado(t){return t
+// pronúncia: só para a voz (na tela continua igual). Termos franceses aportuguesados para a voz em português.
+const PRON=[[/Oiê/gi,'Oi'],[/\bVB\b/g,'Você Bailarina'],[/\bThay\b/g,'Tai'],[/\bVBK\b/g,'Você Bailarina Kids'],
+ [/port de bras/gi,'pór dê brá'],[/pas de chat/gi,'pá dê chá'],[/rond de jambe/gi,'rõ dê jâmb'],[/grand battement/gi,'grã batmã'],
+ [/temps li[ée]/gi,'tã liê'],[/en dehors/gi,'ã deór'],[/en dedans/gi,'ã dedã'],[/spring point[ée]/gi,'spring puantê'],
+ [/[ée]chapp[ée]s?/gi,'echapê'],[/saut[ée]s/gi,'sotês'],[/saut[ée]/gi,'sotê'],[/d[ée]gag[ée]/gi,'degajê'],[/d[ée]velopp[ée]/gi,'devlopê'],
+ [/r[ée]v[ée]rence/gi,'reverânce'],[/glissade/gi,'glissáde'],[/pass[ée](?![a-zà-ú])/gi,'passê'],[/relev[ée]s?/gi,'relevê'],[/[ée]lev[ée]s?/gi,'elevê'],
+ [/tendus?/gi,'tandí'],[/pli[ée]s?/gi,'pliê'],[/chass[ée]s?/gi,'chassê'],[/souplesse/gi,'suplésse'],[/cambr[ée]/gi,'cambrê'],
+ [/allong[ée]/gi,'alonjê'],[/fondu/gi,'fondí'],[/pirouettes?|piruettes?/gi,'piruét'],[/jet[ée]s?/gi,'jetê'],[/assembl[ée]s?/gi,'assamblê'],
+ [/bourr[ée]e?s?/gi,'burrê'],[/sissonnes?/gi,'sissóne'],[/point[ée]s?(?![a-zà-ú])/gi,'puantê'],[/demi[- ]/gi,'demí ']];
+function textoFalado(t){PRON.forEach(([a,b])=>{t=t.replace(a,b)});return t
   .replace(/\*\*|__|[*_`#>]/g,'')
   .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu,'')
   .replace(/^\s*[-•]\s+/gm,'')
