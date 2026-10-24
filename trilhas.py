@@ -28,7 +28,7 @@ PEDIDO = re.compile(
     r'|(monta|manda|mandar|me da|me de|me traga|me traz|traz|traga|passa|passar|sugere|sugerir|preciso de|quero|tem) (uma |a )?aula\b'
     r'|^\s*(uma )?aula (de ballet |de bale |de bale infantil )?(para|pra|p/) (criancas|alunas|turma|minha|meninas|\d)'
     r'|o que (eu )?(dou|faco|vou dar|posso dar) (na|de|em|nessa|na minha) aula|(tem|existe|qual) (uma |a )?trilha (a seguir|para seguir|pra seguir)'
-    r'|exercicios (desta|dessa|da) aula')
+    r'|exercicios (desta|dessa|da) aula|qual aula (eu )?(dou|faco|vou dar|posso dar|darei|aplico)')
 NAO_E = re.compile(r'experimental|tematic|pascoa|dia das maes|dia dos pais|junina|natal|halloween|carnaval|coringa|cantad|ensaio geral|figurino')
 OUTRA = re.compile(r'^\s*(e )?(outra|mais uma|a proxima|proxima|me da outra|manda outra|quero outra|outra aula|outra opcao|mais uma aula|tem outra|tem mais)\b'
                    r'|^\s*(sim,? )?(manda|quero|pode mandar|me manda) (outra|mais uma)'
@@ -144,13 +144,14 @@ class Trilhas:
         if mat: partes.insert(1 if obj else 0, f'*Materiais:* {mat}')
         return rafa[0], '\n'.join(partes), rafa[2]
 
-    def montar(s, faixa, w):
+    def montar(s, faixa, w, nota=None):
         """Aula completa: cada exercício da trilha vem COMPLETO da apostila; a brincadeira, completa.
         Devolve (texto, fontes, estrutura) — estrutura = {titulo, intro, etapas:[{titulo, ref, corpo}], rodape}."""
         mes = NOME_MES.get(w['mes'], '')
         titulo = f"Aula da semana {w['n']} ({mes}) — Trilha anual, turma de {FAIXA_TITULO[faixa]}"
         intro = ('Nesta fase do ano a aula é aquecimento + ensaio: a coreografia vem do material do espetáculo (5 Temas de Espetáculo). '
                  if w['ensaio'] else '') + 'Toque em cada etapa para ver o exercício completo.'
+        if nota: intro = nota + ' ' + intro
         fontes = {w['fonte']}; etapas = []; rodape = []
         for linha in w['texto'].split('\n'):
             m = re.match(r'\s*-\s*\*\*(.+?):\*\*\s*(.*)', linha)
@@ -227,54 +228,82 @@ def eh_pedido(q):
     return bool(PEDIDO.search(n)) and not NAO_E.search(n)
 
 
+NOTA_BABY = ('A Trilha anual começa em 3 anos. Para a sua turma de 2 anos, esta é a aula da trilha de 3 a 4 anos (Kids 1), '
+             'a mais próxima.')
+ROTULO = {'3-4': '3 a 4 anos', '5-6': '5 a 6 anos', '7+': '7 anos ou mais'}
+
+
+def resolver_faixa(ids):
+    """{'2-3'} -> ('3-4', nota); idades misturadas -> ('mista', [faixas]); uma faixa -> (faixa, None); nada -> (None, None)."""
+    if not ids: return None, None
+    nota = NOTA_BABY if '2-3' in ids else None
+    fs = sorted({'3-4' if f == '2-3' else f for f in ids}, key=['3-4', '5-6', '7+'].index)
+    if len(fs) == 1: return fs[0], nota
+    return 'mista', fs
+
+
 class Fluxo:
-    """Estado por sessão do pedido de aula completa. Devolve ('perguntar', texto) | ('aula', bloco, w) | None."""
+    """Estado por sessão do pedido de aula completa. Devolve ('perguntar', texto) | ('aula', texto, w, fontes, estrutura) | None."""
     def __init__(s, trilhas):
         s.t = trilhas
-        s.pend = {}   # session -> {'etapa': 'idade'|'ensaio', 'faixa', 'n'}
-        s.ult = {}    # session -> {'faixa', 'n', 'ensaio'}  (última aula entregue)
+        s.pend = {}   # session -> {'etapa': 'idade'|'ensaio'|'mista', ...}
+        s.ult = {}    # session -> {'faixa', 'n', 'ensaio', 'nota'}  (última aula entregue)
 
-    def _entregar(s, sess, faixa, n_ref, ensaio, avancar=False):
+    def _entregar(s, sess, faixa, n_ref, ensaio, avancar=False, nota=None):
         w = s.t.escolher(faixa, n_ref, ensaio, avancar)
         if not w: return None
-        s.ult[sess] = {'faixa': faixa, 'n': w['n'], 'ensaio': ensaio}
+        s.ult[sess] = {'faixa': faixa, 'n': w['n'], 'ensaio': ensaio, 'nota': nota}
         s.pend.pop(sess, None)
-        txt, fontes, est = s.t.montar(faixa, w)
+        txt, fontes, est = s.t.montar(faixa, w, nota)
         return ('aula', txt, w, fontes, est)
 
-    def _com_faixa(s, sess, faixa, q, hoje=None):
+    def _com_faixa(s, sess, faixa, q, hoje=None, nota=None):
         n = s.t.semana_hoje(faixa, hoje)
         w = next(x for x in s.t.semanas[faixa] if x['n'] == n)
         if w['mes'] in (8, 9, 10, 11):
             nq = norm(q)
             if NAO.search(nq) or re.search(r'sem (espetaculo|ensaio)', nq):
-                return s._entregar(sess, faixa, s.t.equivalente_sem_ensaio(faixa, n), False)
+                return s._entregar(sess, faixa, s.t.equivalente_sem_ensaio(faixa, n), False, nota=nota)
             if re.search(r'ensai|espetaculo', nq) and not NAO.search(nq):
-                return s._entregar(sess, faixa, n, True)
-            s.pend[sess] = {'etapa': 'ensaio', 'faixa': faixa, 'n': n}
+                return s._entregar(sess, faixa, n, True, nota=nota)
+            s.pend[sess] = {'etapa': 'ensaio', 'faixa': faixa, 'n': n, 'nota': nota}
             return ('perguntar', 'Antes de eu te mandar a aula: a sua turma já está ensaiando para o espetáculo de fim de ano? '
                     'Se estiver, te mando a aula da semana com aquecimento e ensaio; se não, te mando uma aula completa.')
-        return s._entregar(sess, faixa, n, False)
+        return s._entregar(sess, faixa, n, False, nota=nota)
+
+    def _por_idades(s, sess, ids, q, hoje):
+        f, extra = resolver_faixa(ids)
+        if f == 'mista':
+            s.pend[sess] = {'etapa': 'mista', 'opcoes': extra}
+            nomes = ' ou '.join(ROTULO[x] for x in extra)
+            return ('perguntar', f'A Trilha anual é organizada por idade. Para a sua turma misturada, monto pela trilha de {nomes}? '
+                    'Se não souber, comece pela da mais nova: fica mais fácil para todas acompanharem.')
+        return s._com_faixa(sess, f, q, hoje, nota=extra)
 
     def tratar(s, sess, q, hoje=None, anterior=''):
         """anterior: última mensagem da professora (para achar a idade quando ela não repete)."""
         nq = norm(q)
         p = s.pend.get(sess)
         if p and p['etapa'] == 'ensaio':
-            if SIM.search(nq) and not NAO.search(nq): return s._entregar(sess, p['faixa'], p['n'], True)
-            if NAO.search(nq): return s._entregar(sess, p['faixa'], s.t.equivalente_sem_ensaio(p['faixa'], p['n']), False)
+            if SIM.search(nq) and not NAO.search(nq): return s._entregar(sess, p['faixa'], p['n'], True, nota=p.get('nota'))
+            if NAO.search(nq): return s._entregar(sess, p['faixa'], s.t.equivalente_sem_ensaio(p['faixa'], p['n']), False, nota=p.get('nota'))
             s.pend.pop(sess, None)               # respondeu outra coisa: segue o fluxo normal
-        if p and p['etapa'] == 'idade':
-            ids = idades(q) - {'2-3'}
+        if p and p['etapa'] == 'mista':
+            ids = {'3-4' if f == '2-3' else f for f in idades(q)} & set(p['opcoes'])
             if len(ids) == 1: return s._com_faixa(sess, ids.pop(), q, hoje)
+            if re.search(r'mais nova|menor|novinha|pequen|primeira|^\s*(sim|pode|ok|isso)\b', nq): return s._com_faixa(sess, p['opcoes'][0], q, hoje)
+            if re.search(r'mais velha|maior|segunda', nq): return s._com_faixa(sess, p['opcoes'][-1], q, hoje)
+            s.pend.pop(sess, None)
+        if p and p['etapa'] == 'idade':
+            ids = idades(q)
+            if ids: return s._por_idades(sess, ids, q, hoje)
             s.pend.pop(sess, None)
         u = s.ult.get(sess)
         if u and OUTRA.search(nq):
-            return s._entregar(sess, u['faixa'], u['n'], u['ensaio'], avancar=True)
+            return s._entregar(sess, u['faixa'], u['n'], u['ensaio'], avancar=True, nota=u.get('nota'))
         if not eh_pedido(q): return None
         ids = idades(q) or idades(anterior)
-        if ids == {'2-3'} or len(ids) > 1: return None    # baby e turma mista: fluxo normal (há conteúdo próprio)
         if not ids:
             s.pend[sess] = {'etapa': 'idade'}
-            return ('perguntar', 'Me conta a idade da turma (3 a 4, 5 a 6 ou 7 anos ou mais) que eu te mando a aula da semana.')
-        return s._com_faixa(sess, ids.pop(), q, hoje)
+            return ('perguntar', 'Me conta a idade da turma que eu te mando a aula da semana completa.')
+        return s._por_idades(sess, ids, q, hoje)
