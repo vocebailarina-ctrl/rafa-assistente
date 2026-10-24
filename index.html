@@ -55,6 +55,15 @@ button.send:disabled{opacity:.5}
     <input id="code" placeholder="Código de acesso" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
     <button class="send" style="padding:10px" onclick="entrar()">Entrar</button>
     <p id="gateerr" style="color:var(--bad)"></p>
+    <p style="text-align:center;margin:6px 0"><a href="#" id="lnkteste" onclick="document.getElementById('formteste').style.display='flex';this.hidden=true;return false">Ainda não sou assinante: quero testar por 24 horas</a></p>
+    <div id="formteste" style="display:none;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:10px" >
+      <p style="margin:0"><b>Teste gratuito de 24 horas</b> (números do Brasil). Cada WhatsApp pode testar uma vez.</p>
+      <input id="tnome" placeholder="Seu nome" autocomplete="name">
+      <input id="twhats" placeholder="Seu WhatsApp com DDD" inputmode="tel" autocomplete="tel">
+      <label style="font-size:.85rem;display:flex;gap:6px;align-items:flex-start"><input type="checkbox" id="taceite" style="width:auto;margin-top:3px"> Aceito receber contato do Você Bailarina por WhatsApp sobre o teste e a assinatura.</label>
+      <button class="send" style="padding:10px" onclick="testar()">Começar o teste</button>
+      <p id="testeerr" style="color:var(--bad);margin:0"></p>
+    </div>
   </div>
 </main>
 <div class="aviso" id="aviso" hidden>A Rafa Assistente pode errar. Marque 👎 quando algo não fizer sentido: é assim que a Rafa melhora o assistente.</div>
@@ -91,6 +100,16 @@ async function entrar(){const nome=document.getElementById('nome').value.trim(),
   if(v==='falha'){err.textContent='Não consegui conferir agora. Verifique a internet e tente de novo.';return}
   err.textContent='';S.nome=nome;S.code=code;try{localStorage.setItem('rafa_s',JSON.stringify(S))}catch(e){}
   start();}
+const MSG_FIM_TESTE='Seu teste de 24 horas terminou. Para continuar com a Rafa Assistente, conheça a assinatura: vocebailarina.com/assinatura';
+async function testar(){const err=document.getElementById('testeerr'),nome=document.getElementById('tnome').value.trim(),w=document.getElementById('twhats').value.trim(),ac=document.getElementById('taceite').checked;
+  if(!nome||!w){err.textContent='Preencha nome e WhatsApp.';return}
+  if(!ac){err.textContent='Marque que aceita receber contato para começar.';return}
+  err.textContent='Abrindo seu teste…';
+  try{const r=await fetch('/api/teste',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome,whatsapp:w,aceite:ac,canal:new URLSearchParams(location.search).get('c')||''})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){err.textContent=j.detail||'Não consegui abrir o teste agora. Tente de novo em um minuto.';return}
+    err.textContent='';S.nome=nome;S.code=j.token;try{localStorage.setItem('rafa_s',JSON.stringify(S))}catch(e){}start();
+  }catch(e){err.textContent='Não consegui conectar agora. Verifique a internet e tente de novo.'}}
 function sair(msg){try{localStorage.removeItem('rafa_s');sessionStorage.setItem('rafa_err',msg)}catch(e){}location.reload()}
 async function start(){document.getElementById('gate')?.remove();form.hidden=false;document.getElementById('aviso').hidden=false;
   const r=await fetch('/api/abertura').then(r=>r.json());botaoOuvir(add('bot',md(r.texto)),r.texto);inp.focus();}
@@ -98,7 +117,7 @@ async function enviar(ev){ev.preventDefault();pararMic();const q=inp.value.trim(
   const ctx={bot_anterior:CTX.bot,perguntas:CTX.perg.slice(-4)};CTX.perg.push(q);
   add('user',md(q));const t=add('bot typing','Pensando…');
   try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:S.session,code:S.code,message:q,nome:S.nome,...ctx})});
-    if(r.status===401){t.remove();sair('Seu código de acesso mudou ou expirou. Digite o código novo para continuar.');return}
+    if(r.status===401){t.remove();sair((S.code||'').startsWith('T.')?MSG_FIM_TESTE:'Seu código de acesso mudou ou expirou. Digite o código novo para continuar.');return}
     const j=await r.json();CTX.bot=j.resposta||'';t.classList.remove('typing');t.innerHTML=j.aula?aulaHTML(j.aula):md(j.resposta);
     if(j.aula)t.querySelectorAll('button[data-i]').forEach(b=>{const e=j.aula.etapas[+b.dataset.i];b.onclick=()=>ouvir(b,e.titulo+'.\n'+e.corpo)});
     const m=botaoOuvir(t,j.resposta);
@@ -165,7 +184,7 @@ if(SR&&mic){mic.hidden=false;
 inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit()}});
 inp.addEventListener('input',()=>{inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,120)+'px'});
 try{const m=sessionStorage.getItem('rafa_err');if(m){document.getElementById('gateerr').textContent=m;sessionStorage.removeItem('rafa_err')}}catch(e){}
-if(S.code&&S.nome){conferir(S.code).then(v=>{if(v==='errado'){try{localStorage.removeItem('rafa_s')}catch(e){};document.getElementById('gateerr').textContent='Seu código de acesso mudou. Digite o código novo para continuar.'}else start()})}
+if(S.code&&S.nome){conferir(S.code).then(v=>{if(v==='errado'){try{localStorage.removeItem('rafa_s')}catch(e){};document.getElementById('gateerr').textContent=(S.code||'').startsWith('T.')?MSG_FIM_TESTE:'Seu código de acesso mudou. Digite o código novo para continuar.'}else start()})}
 </script>
 </body>
 </html>

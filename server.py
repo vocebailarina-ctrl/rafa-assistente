@@ -1,7 +1,7 @@
 """Rafa Assistente — servidor web de teste (FastAPI).
 Reaproveita src/retriever.py e src/assistente.py. Logs em app/data/conversas.jsonl.
 Env: ANTHROPIC_API_KEY, ACCESS_CODE (código que as professoras digitam), ADMIN_CODE (painel de logs), MAX_MSGS_DIA (padrão 40)."""
-import os, sys, json, time, uuid, re, collections, datetime as dt
+import os, sys, json, time, uuid, re, collections, datetime as dt, hmac, hashlib, base64, urllib.request
 HERE=os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE); os.chdir(HERE); os.makedirs('data',exist_ok=True)
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
@@ -14,6 +14,13 @@ ACCESS=os.environ.get('ACCESS_CODE','bailarina')
 ADMIN=os.environ.get('ADMIN_CODE','rafa-admin')
 MAXD=int(os.environ.get('MAX_MSGS_DIA','40'))
 LOG='data/conversas.jsonl'
+# --- Teste gratuito por WhatsApp (só Brasil): 1 entrada por número, sessão de TESTE_HORAS, TESTE_MSGS mensagens ---
+TRIAL_H=int(os.environ.get('TESTE_HORAS','24')); MAXT=int(os.environ.get('TESTE_MSGS','15')); TETO=int(os.environ.get('TESTE_TETO_DIA','30'))
+SB_URL=os.environ.get('SUPABASE_URL','').rstrip('/'); SB_KEY=os.environ.get('SUPABASE_KEY','')
+SECRET=(os.environ.get('TRIAL_SECRET') or (ADMIN+'|'+ACCESS)).encode()
+LEADS='data/testes.jsonl'
+USAGE_T=collections.defaultdict(int)   # telefone -> msgs no teste
+IPS=collections.defaultdict(list)      # ip -> timestamps (freio simples)
 app=FastAPI(title='Rafa Assistente')
 A=Assistente()
 HIST=collections.defaultdict(list)   # session -> [{"role","content"}] (sem trechos)
@@ -24,11 +31,54 @@ LASTQ={}                             # session -> consulta do assunto atual (par
 
 class Entrada(BaseModel):
     code: str
+class Teste(BaseModel):
+    nome: str; whatsapp: str; canal: str|None=None; aceite: bool=False
 class Msg(BaseModel):
     session: str; code: str; message: str; nome: str|None=None
     bot_anterior: str|None=None; perguntas: list[str]|None=None   # contexto vindo da página (sobrevive a reinício do servidor)
 class Fb(BaseModel):
     session: str; code: str; turn: str; vote: int; comment: str|None=None
+
+def _assina(payload):
+    return hmac.new(SECRET,payload.encode(),hashlib.sha256).hexdigest()[:32]
+def emitir_token(tel):
+    exp=int(time.time())+TRIAL_H*3600
+    p=base64.urlsafe_b64encode(f'{tel}|{exp}'.encode()).decode().rstrip('=')
+    return f'T.{p}.{_assina(p)}'
+def ler_token(code):
+    """-> telefone se o token de teste é válido e não expirou; None caso contrário"""
+    try:
+        _,p,sig=code.strip().split('.')
+        if not hmac.compare_digest(sig,_assina(p)): return None
+        tel,exp=base64.urlsafe_b64decode(p+'='*(-len(p)%4)).decode().split('|')
+        return tel if time.time()<int(exp) else None
+    except Exception: return None
+def acesso(code):
+    """'assinante' | ('teste',tel) | None"""
+    c=(code or '').strip()
+    if c==ACCESS.strip(): return 'assinante'
+    if c.startswith('T.'):
+        t=ler_token(c)
+        if t: return ('teste',t)
+    return None
+def tel_br(x):
+    d=re.sub(r'\D','',x or '')
+    if d.startswith('00'): d=d[2:]
+    if d.startswith('55') and len(d)==13: d=d[2:]
+    if len(d)!=11 or d[0]=='0' or d[1]=='0' or d[2]!='9': return None   # celular brasileiro: DDD + 9 + 8 dígitos
+    return '55'+d
+def reivindicar(tel,nome,canal):
+    """Registra o número. Devolve 'ok' | 'ja_usado' | 'teto'. Supabase se configurado; senão arquivo local (apagado a cada deploy)."""
+    if SB_URL and SB_KEY:
+        req=urllib.request.Request(SB_URL+'/rest/v1/rpc/claim_trial',data=json.dumps({'p_tel':tel,'p_nome':nome,'p_canal':canal or '','p_teto':TETO}).encode(),
+            headers={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'})
+        with urllib.request.urlopen(req,timeout=10) as r: return json.loads(r.read().decode())
+    hoje=dt.date.today().isoformat(); regs=[]
+    if os.path.exists(LEADS): regs=[json.loads(l) for l in open(LEADS) if l.strip()]
+    if any(r['tel']==tel for r in regs): return 'ja_usado'
+    if sum(1 for r in regs if r['ts'][:10]==hoje)>=TETO: return 'teto'
+    with open(LEADS,'a') as f: f.write(json.dumps({'tel':tel,'nome':nome,'canal':canal or '','ts':dt.datetime.utcnow().isoformat(timespec='seconds')},ensure_ascii=False)+'\n')
+    return 'ok'
 
 def log(rec):
     rec['ts']=dt.datetime.utcnow().isoformat(timespec='seconds')
@@ -49,16 +99,39 @@ def abertura(): return {'texto':ABERTURA}
 @app.post('/api/entrar')
 def entrar(e:Entrada):
     # confere o código ANTES de abrir o chat (comparação exata: maiúscula conta)
-    if e.code.strip()!=ACCESS.strip(): raise HTTPException(401,'código inválido')
+    if not acesso(e.code): raise HTTPException(401,'código inválido')
     return {'ok':True}
+
+@app.post('/api/teste')
+def teste(t:Teste,request:Request):
+    ip=(request.headers.get('x-forwarded-for') or request.client.host or '?').split(',')[0].strip(); agora=time.time()
+    IPS[ip]=[x for x in IPS[ip] if agora-x<3600]
+    if len(IPS[ip])>=6: raise HTTPException(429,'Muitas tentativas. Tente de novo mais tarde.')
+    IPS[ip].append(agora)
+    nome=t.nome.strip()
+    if not t.aceite: raise HTTPException(400,'Para entrar, marque que aceita receber contato do Você Bailarina.')
+    if not (2<=len(nome)<=60): raise HTTPException(400,'Digite seu nome.')
+    tel=tel_br(t.whatsapp)
+    if not tel: raise HTTPException(400,'Por enquanto o teste é só para números do Brasil. Digite o DDD e o número, por exemplo (11) 91234-5678.')
+    try: r=reivindicar(tel,nome,(t.canal or '')[:30])
+    except Exception as e:
+        log({'erro_teste':str(e)}); raise HTTPException(503,'Não consegui registrar seu teste agora. Tente de novo em um minuto.')
+    if r=='ja_usado': raise HTTPException(409,'Esse WhatsApp já usou o teste gratuito. Para continuar, conheça a assinatura: vocebailarina.com/assinatura')
+    if r=='teto': raise HTTPException(429,'Os testes de hoje acabaram. Volte amanhã ou conheça a assinatura: vocebailarina.com/assinatura')
+    log({'teste_entrada':True,'nome':nome,'tel_final':tel[-4:],'canal':t.canal or ''})
+    return {'token':emitir_token(tel),'horas':TRIAL_H}
 
 @app.post('/api/chat')
 def chat(m:Msg):
-    if m.code.strip()!=ACCESS.strip(): raise HTTPException(401,'código inválido')
+    ac=acesso(m.code)
+    if not ac: raise HTTPException(401,'código inválido')
     q=m.message.strip()
     if not q or len(q)>1500: raise HTTPException(400,'mensagem vazia ou longa demais')
     day=dt.date.today().isoformat(); k=(m.session,day)
-    if USAGE[k]>=MAXD: return {'turn':None,'resposta':f'Por hoje chegamos ao limite de perguntas deste teste. Amanhã eu volto! Se for urgente, fale com a Thay no {SUPORTE}.','fontes':[]}
+    if isinstance(ac,tuple):
+        if USAGE_T[ac[1]]>=MAXT: return {'turn':None,'resposta':f'Chegamos ao fim das {MAXT} perguntas do seu teste gratuito. Para continuar com a Rafa Assistente, conheça a assinatura do Você Bailarina: vocebailarina.com/assinatura. Qualquer dúvida, fale com a Thay no {SUPORTE}.','fontes':[]}
+        USAGE_T[ac[1]]+=1
+    elif USAGE[k]>=MAXD: return {'turn':None,'resposta':f'Por hoje chegamos ao limite de perguntas deste teste. Amanhã eu volto! Se for urgente, fale com a Thay no {SUPORTE}.','fontes':[]}
     USAGE[k]+=1
     hist=HIST[m.session][-6:]
     t0=time.time(); modo='normal'
@@ -102,7 +175,7 @@ def chat(m:Msg):
 
 @app.post('/api/feedback')
 def feedback(f:Fb):
-    if f.code.strip()!=ACCESS.strip(): raise HTTPException(401)
+    if not acesso(f.code): raise HTTPException(401)
     log({'session':f.session,'feedback':f.turn,'vote':f.vote,'comment':f.comment}); return {'ok':True}
 
 def _admin_ok(code): return code.strip()==ADMIN.strip()
