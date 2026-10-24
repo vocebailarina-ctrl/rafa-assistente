@@ -31,6 +31,10 @@ button.send:disabled{opacity:.5}
 .gate input{border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:inherit;font-size:15px}
 .gate p{margin:0;color:var(--muted);font-size:14px}
 .typing{color:var(--muted);font-style:italic}
+.mic{background:var(--card);color:var(--rosa);border:1px solid var(--line);border-radius:14px;width:46px;font-size:20px;cursor:pointer;flex:none}
+.mic.on{background:var(--rosa);color:#fff;border-color:var(--rosa);animation:pulsa 1.2s infinite}
+@keyframes pulsa{0%,100%{box-shadow:0 0 0 0 rgba(205,121,144,.5)}50%{box-shadow:0 0 0 8px rgba(205,121,144,0)}}
+.meta button.ouvir{font-weight:700;color:var(--rosa)}
 .aviso{font-size:12px;color:var(--muted);text-align:center;padding:4px 16px 0}
 @media (prefers-color-scheme:dark){:root{--bg:#1d151a;--card:#2a1f25;--ink:#f3e8ed;--muted:#b39aa6;--rosa2:#4a2a38;--line:#4a3540}.bot b{color:#f0a3bb}}
 </style>
@@ -49,6 +53,7 @@ button.send:disabled{opacity:.5}
 </main>
 <div class="aviso" id="aviso" hidden>A Rafa Assistente pode errar. Marque 👎 quando algo não fizer sentido: é assim que a Rafa melhora o assistente.</div>
 <form id="form" hidden onsubmit="return enviar(event)">
+  <button type="button" class="mic" id="mic" aria-label="Falar a pergunta" title="Falar a pergunta" hidden>🎤</button>
   <textarea id="inp" rows="1" placeholder="Pergunte sobre aulas, método, datas, espetáculo…" required></textarea>
   <button class="send" id="btn">Enviar</button>
 </form>
@@ -77,19 +82,64 @@ async function entrar(){const nome=document.getElementById('nome').value.trim(),
   start();}
 function sair(msg){try{localStorage.removeItem('rafa_s');sessionStorage.setItem('rafa_err',msg)}catch(e){}location.reload()}
 async function start(){document.getElementById('gate')?.remove();form.hidden=false;document.getElementById('aviso').hidden=false;
-  const r=await fetch('/api/abertura').then(r=>r.json());add('bot',md(r.texto));inp.focus();}
-async function enviar(ev){ev.preventDefault();const q=inp.value.trim();if(!q)return;inp.value='';btn.disabled=true;
+  const r=await fetch('/api/abertura').then(r=>r.json());botaoOuvir(add('bot',md(r.texto)),r.texto);inp.focus();}
+async function enviar(ev){ev.preventDefault();pararMic();const q=inp.value.trim();if(!q)return;inp.value='';btn.disabled=true;
   add('user',md(q));const t=add('bot typing','Pensando…');
   try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:S.session,code:S.code,message:q,nome:S.nome})});
     if(r.status===401){t.remove();sair('Seu código de acesso mudou ou expirou. Digite o código novo para continuar.');return}
     const j=await r.json();t.classList.remove('typing');t.innerHTML=md(j.resposta);
-    if(j.turn){const m=document.createElement('div');m.className='meta';m.innerHTML=`Essa resposta ajudou? <button onclick="fb(this,'${j.turn}',1)">👍</button><button onclick="fb(this,'${j.turn}',-1)">👎</button>`;t.appendChild(m)}
+    const m=botaoOuvir(t,j.resposta);
+    if(j.turn){const f=document.createElement('span');f.innerHTML=`Essa resposta ajudou? <button onclick="fb(this,'${j.turn}',1)">👍</button><button onclick="fb(this,'${j.turn}',-1)">👎</button>`;m.appendChild(f)}
   }catch(e){t.innerHTML='Não consegui responder agora. Tente de novo em um minuto.'}
   btn.disabled=false;inp.focus();main.scrollTop=main.scrollHeight;}
-async function fb(b,turn,v){const box=b.parentElement;[...box.querySelectorAll('button')].forEach(x=>x.classList.remove('on'));b.classList.add('on');
+async function fb(b,turn,v){const box=b.closest('.meta');[...box.querySelectorAll('button')].forEach(x=>x.classList.remove('on'));b.classList.add('on');
   let comment=null;if(v<0){comment=prompt('O que não ficou bom? (opcional)')||null}
   fetch('/api/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:S.session,code:S.code,turn,vote:v,comment})});
   const s=document.createElement('span');s.textContent=v>0?'Obrigada! 💗':'Anotado, obrigada. Vou aprender com isso.';box.appendChild(s);}
+
+/* ---------- VOZ: ouvir a resposta (leitura em voz alta) ---------- */
+const TTS=('speechSynthesis' in window)&&('SpeechSynthesisUtterance' in window);
+let vozPT=null,falando=null;
+function escolherVoz(){if(!TTS)return;const vs=speechSynthesis.getVoices();
+  vozPT=vs.find(v=>/pt[-_]BR/i.test(v.lang)&&/female|luciana|francisca|maria|feminina/i.test(v.name))||vs.find(v=>/pt[-_]BR/i.test(v.lang))||vs.find(v=>/^pt/i.test(v.lang))||null}
+if(TTS){escolherVoz();speechSynthesis.onvoiceschanged=escolherVoz}
+function textoFalado(t){return t
+  .replace(/\*\*|__|[*_`#>]/g,'')
+  .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu,'')
+  .replace(/^\s*[-•]\s+/gm,'')
+  .replace(/^\s*(\d+)[.)]\s+/gm,'$1. ')
+  .replace(/Mód\.\s*/g,'Módulo ').replace(/\bEx\.\s*/g,'Exercício ').replace(/\s·\s/g,', ')
+  .replace(/\s*→\s*/g,': ').replace(/\s—\s/g,', ').replace(/\s\+\s/g,' e ').replace(/(\d)ª/g,'$1ª').replace(/\n{2,}/g,'\n')}
+function pedacos(t){ // uma fala por linha (pausa natural entre as etapas); linha longa é dividida em frases
+  const out=[];t.split(/\n+/).forEach(l=>{l=l.trim();if(!l)return;
+    if(l.length<=220){out.push(l);return}
+    let cur='';(l.match(/[^.!?]+[.!?]*/g)||[l]).forEach(f=>{f=f.trim();if(cur&&cur.length+f.length>220){out.push(cur);cur=f}else cur=cur?cur+' '+f:f});if(cur)out.push(cur)});return out}
+function pararFala(){if(!TTS)return;speechSynthesis.cancel();if(falando){falando.textContent='🔊 Ouvir';falando.classList.remove('on');falando=null}}
+function ouvir(b,texto){if(!TTS)return;
+  if(falando===b){pararFala();return}
+  pararFala();pararMic();
+  const fs=pedacos(textoFalado(texto));if(!fs.length)return;
+  falando=b;b.textContent='⏹ Parar';b.classList.add('on');
+  fs.forEach((f,i)=>{const u=new SpeechSynthesisUtterance(f);u.lang='pt-BR';if(vozPT)u.voice=vozPT;u.rate=1;
+    if(i===fs.length-1)u.onend=()=>{if(falando===b)pararFala()};
+    u.onerror=()=>{if(falando===b&&i===fs.length-1)pararFala()};speechSynthesis.speak(u)})}
+function botaoOuvir(el,texto){const m=document.createElement('div');m.className='meta';
+  if(TTS){const b=document.createElement('button');b.type='button';b.className='ouvir';b.textContent='🔊 Ouvir';b.onclick=()=>ouvir(b,texto);m.appendChild(b)}
+  el.appendChild(m);return m}
+
+/* ---------- VOZ: falar a pergunta (ditado) ---------- */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const mic=document.getElementById('mic');let rec=null,ouvindo=false,base='';
+function pararMic(){if(rec&&ouvindo){try{rec.stop()}catch(e){}}}
+if(SR&&mic){mic.hidden=false;
+  mic.onclick=()=>{if(ouvindo){pararMic();return}
+    pararFala();rec=new SR();rec.lang='pt-BR';rec.interimResults=true;rec.continuous=false;
+    base=inp.value.trim()?inp.value.trim()+' ':'';
+    rec.onstart=()=>{ouvindo=true;mic.classList.add('on');mic.textContent='■';inp.placeholder='Pode falar…'};
+    rec.onresult=e=>{let t='';for(const r of e.results)t+=r[0].transcript;inp.value=base+t;inp.dispatchEvent(new Event('input'))};
+    rec.onerror=e=>{inp.placeholder=(e.error==='not-allowed'||e.error==='service-not-allowed')?'Libere o microfone para este site nas configurações do navegador.':'Não entendi. Toque no 🎤 e fale de novo.'};
+    rec.onend=()=>{ouvindo=false;mic.classList.remove('on');mic.textContent='🎤';if(!inp.placeholder.startsWith('Libere')&&!inp.placeholder.startsWith('Não'))inp.placeholder='Pergunte sobre aulas, método, datas, espetáculo…';inp.focus()};
+    try{rec.start()}catch(e){}};}
 inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit()}});
 inp.addEventListener('input',()=>{inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,120)+'px'});
 try{const m=sessionStorage.getItem('rafa_err');if(m){document.getElementById('gateerr').textContent=m;sessionStorage.removeItem('rafa_err')}}catch(e){}
