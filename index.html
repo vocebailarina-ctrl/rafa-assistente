@@ -34,6 +34,12 @@ button.send:disabled{opacity:.5}
 .mic{background:var(--card);color:var(--rosa);border:1px solid var(--line);border-radius:14px;width:46px;font-size:20px;cursor:pointer;flex:none}
 .mic.on{background:var(--rosa);color:#fff;border-color:var(--rosa);animation:pulsa 1.2s infinite}
 @keyframes pulsa{0%,100%{box-shadow:0 0 0 0 rgba(205,121,144,.5)}50%{box-shadow:0 0 0 8px rgba(205,121,144,0)}}
+.aula h3{font-size:15px;margin:0 0 4px;color:#b85a78}.aula .intro{color:var(--muted);font-size:13px;margin:0 0 8px}
+.aula details{border:1px solid var(--line);border-radius:12px;margin:6px 0;background:var(--bg)}
+.aula summary{cursor:pointer;padding:9px 12px;font-weight:700;list-style:none;display:flex;justify-content:space-between;gap:8px}
+.aula summary::-webkit-details-marker{display:none}.aula summary::after{content:'+';color:var(--rosa);font-weight:700}
+.aula details[open] summary::after{content:'–'}.aula .corpo{padding:0 12px 10px;white-space:pre-wrap}.aula .ref{color:var(--muted);font-size:12px;display:block;margin-bottom:4px}
+.aula .rodape{margin-top:8px;font-size:13px}
 .meta button.ouvir{font-weight:700;color:var(--rosa)}
 .aviso{font-size:12px;color:var(--muted);text-align:center;padding:4px 16px 0}
 @media (prefers-color-scheme:dark){:root{--bg:#1d151a;--card:#2a1f25;--ink:#f3e8ed;--muted:#b39aa6;--rosa2:#4a2a38;--line:#4a3540}.bot b{color:#f0a3bb}}
@@ -70,6 +76,10 @@ function md(t){ // markdown mínimo: **b**, *i*, listas, quebras
     if(m){const k=m[1]?'ol':'ul';if(inl!==k){if(inl)out+=`</${inl}>`;out+=`<${k}>`;inl=k}out+=`<li>${m[2]}</li>`}
     else{if(inl){out+=`</${inl}>`;inl=null}out+=l+'\n'}}
   if(inl)out+=`</${inl}>`;return out.replace(/\n{2,}/g,'\n\n').trim();}
+function esc(x){return String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function aulaHTML(a){let h=`<div class="aula"><h3>${esc(a.titulo)}</h3><p class="intro">${esc(a.intro)}</p>`;
+  a.etapas.forEach((e,i)=>{h+=`<details><summary><span>${esc(e.titulo)}</span></summary><div class="corpo">${e.ref?`<span class="ref">${esc(e.ref)}</span>`:''}${md(e.corpo)}${TTS?`<div class="meta"><button type="button" class="ouvir" data-i="${i}">🔊 Ouvir este exercício</button></div>`:''}</div></details>`});
+  return h+`<div class="rodape">${md(a.rodape)}</div></div>`}
 function add(cls,html){const d=document.createElement('div');d.className='msg '+cls;d.innerHTML=html;main.appendChild(d);main.scrollTop=main.scrollHeight;return d}
 const ERR_COD='Código incorreto. Confira o código que você recebeu: letra maiúscula e minúscula fazem diferença.';
 async function conferir(code){try{const r=await fetch('/api/entrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});return r.ok?'ok':(r.status===401?'errado':'falha')}catch(e){return 'falha'}}
@@ -87,7 +97,8 @@ async function enviar(ev){ev.preventDefault();pararMic();const q=inp.value.trim(
   add('user',md(q));const t=add('bot typing','Pensando…');
   try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:S.session,code:S.code,message:q,nome:S.nome})});
     if(r.status===401){t.remove();sair('Seu código de acesso mudou ou expirou. Digite o código novo para continuar.');return}
-    const j=await r.json();t.classList.remove('typing');t.innerHTML=md(j.resposta);
+    const j=await r.json();t.classList.remove('typing');t.innerHTML=j.aula?aulaHTML(j.aula):md(j.resposta);
+    if(j.aula)t.querySelectorAll('button[data-i]').forEach(b=>{const e=j.aula.etapas[+b.dataset.i];b.onclick=()=>ouvir(b,e.titulo+'.\n'+e.corpo)});
     const m=botaoOuvir(t,j.resposta);
     if(j.turn){const f=document.createElement('span');f.innerHTML=`Essa resposta ajudou? <button onclick="fb(this,'${j.turn}',1)">👍</button><button onclick="fb(this,'${j.turn}',-1)">👎</button>`;m.appendChild(f)}
   }catch(e){t.innerHTML='Não consegui responder agora. Tente de novo em um minuto.'}
@@ -123,7 +134,7 @@ function pedacos(t){ // uma fala por linha (pausa natural entre as etapas); linh
   const out=[];t.split(/\n+/).forEach(l=>{l=l.trim();if(!l)return;
     if(l.length<=220){out.push(l);return}
     let cur='';(l.match(/[^.!?]+[.!?]*/g)||[l]).forEach(f=>{f=f.trim();if(cur&&cur.length+f.length>220){out.push(cur);cur=f}else cur=cur?cur+' '+f:f});if(cur)out.push(cur)});return out}
-function pararFala(){if(!TTS)return;speechSynthesis.cancel();if(falando){falando.textContent='🔊 Ouvir';falando.classList.remove('on');falando=null}}
+function pararFala(){if(!TTS)return;speechSynthesis.cancel();if(falando){falando.textContent=falando.dataset.i!==undefined?'🔊 Ouvir este exercício':'🔊 Ouvir';falando.classList.remove('on');falando=null}}
 function ouvir(b,texto){if(!TTS)return;
   if(falando===b){pararFala();return}
   pararFala();pararMic();

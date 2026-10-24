@@ -67,10 +67,11 @@ def chat(m:Msg):
         txt=res[1]; HIST[m.session]+=[{"role":"user","content":q},{"role":"assistant","content":txt}]
         log({'session':m.session,'nome':m.nome,'q':q,'a':txt,'modo':'trilha-pergunta','seg':0})
         return {'turn':None,'resposta':txt,'fontes':[]}
-    if res and res[0]=='aula':
-        w=res[2]; modo='trilha'; LASTQ.pop(m.session,None)
-        content=mensagem_trilha(res[1],q); ctx=[]; exs=[]
-        fontes=[f"{w['fonte']} · Semana {w['n']}"]
+    if res and res[0]=='aula':          # aula completa montada direto da trilha + apostilas (texto exato, sem IA)
+        _,txt,w,fontes,est=res; LASTQ.pop(m.session,None); turn=uuid.uuid4().hex[:10]
+        HIST[m.session]+=[{"role":"user","content":q},{"role":"assistant","content":txt[:1500]}]
+        log({'session':m.session,'nome':m.nome,'turn':turn,'q':q,'a':txt,'fontes':fontes,'modo':'trilha','semana':w['n'],'seg':round(time.time()-t0,1)})
+        return {'turn':turn,'resposta':txt,'fontes':fontes,'aula':est}
     else:
         FL.ult.pop(m.session,None)
         outra=bool(OUTRA.search(norm(q))) and m.session in LASTQ

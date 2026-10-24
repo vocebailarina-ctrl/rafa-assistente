@@ -10,6 +10,7 @@ Fluxo:
 """
 import re, datetime as dt
 from indexar import norm
+from exercicios import carregar as carregar_exercicios
 
 try:
     from zoneinfo import ZoneInfo
@@ -48,6 +49,7 @@ def idades(q):
 
 class Trilhas:
     def __init__(s, chunks):
+        s._montar_indices(chunks)
         s.semanas = {}   # faixa -> [ {n, mes, texto, ensaio, especial} ] ordenado
         s.brinc = {}     # faixa -> [texto de brincadeira real]
         for c in chunks:
@@ -62,7 +64,7 @@ class Trilhas:
                 'ensaio': '**Ensaio:** Sim' in txt, 'especial': bool(ESPECIAL.search(norm(txt))), 'fonte': t})
             for b in re.findall(r'\*\*Brincadeira[^*]*:\*\*\s*(.+)', txt):
                 b = b.strip()
-                if norm(b) not in ('brincadeira', 'festa junina (ludico)') and b not in s.brinc.setdefault(faixa, []):
+                if _chave(b) not in ('brincadeira', 'festa junina ludico') and b not in s.brinc.setdefault(faixa, []):
                     s.brinc[faixa].append(b)
         for f in s.semanas: s.semanas[f].sort(key=lambda x: x['n'])
 
@@ -104,13 +106,120 @@ class Trilhas:
         lst = s.brinc.get(faixa) or []
         return lst[n % len(lst)] if lst else None
 
-    def bloco(s, faixa, w):
-        vazia = bool(re.search(r'\*\*Brincadeira[^*]*:\*\*\s*Brincadeira\s*$', w['texto'], re.M))
-        sug = s.brincadeira(faixa, w['n']) if vazia else None
+    # ---------- cruzamento: trilha -> exercício completo da apostila / brincadeira completa ----------
+    def _montar_indices(s, chunks):
+        s.ex = {(e['doc'], e['mod'], e['num']): e for e in carregar_exercicios(chunks)}
+        s.brinc_txt = {}
+        for c in chunks:                                   # explicações da Rafa: parágrafos "**Nome** ..."
+            if c['title'].startswith('Trilha'): continue
+            for p in re.split(r'\n\s*\n', c['text']):
+                m = re.match(r'\s*\*\*(.+?)\*\*\s*(.*)', p, re.S)
+                if m and len(p.split()) > 15:
+                    k = _chave(m.group(1))
+                    if k and k not in s.brinc_txt:
+                        s.brinc_txt[k] = (m.group(1).strip(' .:'), _limpa(m.group(2)).lstrip('. '), c['title'])
+        ebook = '\n'.join(c['text'] for c in sorted((c for c in chunks if c['title'] == 'brincadeira-dancada'), key=lambda c: c['i']))
+        s.ebook = ebook                                    # e-book Brincadeira Dançada: "Nome / OBJETIVO / MATERIAIS / DESCRIÇÃO"
+        s.ebook_n = norm(ebook)
+
+    def _brinc_completa(s, nome):
+        k = _chave(nome)
+        rafa = next((v for kk, v in s.brinc_txt.items() if kk == k or kk.startswith(k) or k.startswith(kk)), None)
+        obj = mat = None
+        for m in re.finditer(re.escape(nome.split('/')[0].strip()[:14]), s.ebook, re.I):
+            bloco = s.ebook[m.start(): m.start() + 1500]
+            if 'OBJETIVO' in bloco[:200]:
+                bloco = bloco.split('Clique aqui')[0]
+                o = re.search(r'OBJETIVO:\s*(.+?)(?=MATERIA|DESCRI)', bloco, re.S)
+                ma = re.search(r'MATERIAIS?:\s*(.+?)(?=DESCRI|$)', bloco, re.S)
+                obj = _limpa(o.group(1)) if o else None
+                mat = _limpa(ma.group(1)) if ma else None
+                if not rafa:
+                    de = re.search(r'DESCRIÇÃO DA ATIVIDADE\s*(.+)', bloco, re.S)
+                    if de: rafa = (nome, _limpa(de.group(1)), 'E-book Brincadeira Dançada')
+                break
+        if not rafa: return None
+        partes = [rafa[1]]
+        if obj: partes.insert(0, f'*Objetivo:* {obj}')
+        if mat: partes.insert(1 if obj else 0, f'*Materiais:* {mat}')
+        return rafa[0], '\n'.join(partes), rafa[2]
+
+    def montar(s, faixa, w):
+        """Aula completa: cada exercício da trilha vem COMPLETO da apostila; a brincadeira, completa.
+        Devolve (texto, fontes, estrutura) — estrutura = {titulo, intro, etapas:[{titulo, ref, corpo}], rodape}."""
         mes = NOME_MES.get(w['mes'], '')
-        attrs = f'fonte="{w["fonte"]}" semana="{w["n"]}" mes="{mes}" faixa="{FAIXA_TITULO[faixa]}" ensaio="{"sim" if w["ensaio"] else "nao"}"'
-        if sug: attrs += f' brincadeira_sugerida="{sug.replace(chr(34), chr(39))}"'
-        return f'<aula_trilha {attrs}>\n{w["texto"]}\n</aula_trilha>'
+        titulo = f"Aula da semana {w['n']} ({mes}) — Trilha anual, turma de {FAIXA_TITULO[faixa]}"
+        intro = ('Nesta fase do ano a aula é aquecimento + ensaio: a coreografia vem do material do espetáculo (5 Temas de Espetáculo). '
+                 if w['ensaio'] else '') + 'Toque em cada etapa para ver o exercício completo.'
+        fontes = {w['fonte']}; etapas = []; rodape = []
+        for linha in w['texto'].split('\n'):
+            m = re.match(r'\s*-\s*\*\*(.+?):\*\*\s*(.*)', linha)
+            if not m: continue
+            etapa, conteudo = m.group(1).strip(), m.group(2).strip()
+            if etapa.lower().startswith('ensaio') or conteudo in ('', '(aula especial)'): continue
+            if etapa.lower().startswith(('aula 2', 'foco / aula 2')):
+                rodape.append(f'**{etapa}:** {conteudo}'); continue
+            r = re.match(r'Mód\.\s*(\w)\s*·\s*Ex\.\s*(\d+)\s*—\s*([^—]+)', conteudo)
+            e = s.ex.get((DOC_FAIXA[faixa], r.group(1), r.group(2))) if r else None
+            if e:
+                tit = etapa if norm(e['nome']) == norm(etapa) else f"{etapa}: {e['nome']}"
+                etapas.append({'titulo': tit, 'ref': e['rotulo'], 'corpo': _exercicio_md(e['text'])})
+                fontes.add(e['apostila']); continue
+            if etapa.lower().startswith('brincadeira'):
+                nome = conteudo
+                if _chave(conteudo) in ('brincadeira', 'festa junina ludico'):
+                    nome = s.brincadeira(faixa, w['n']) or ''
+                nome_curto = re.match(r'(.+?)(?=[A-ZÁÉ“"][a-zà-ú ]|$)', nome).group(1).strip() if nome else ''
+                b = s._brinc_completa(nome_curto) if nome_curto else None
+                if b:
+                    extra = ' (sugestão da própria trilha)' if _chave(conteudo) in ('brincadeira', 'festa junina ludico') else ''
+                    etapas.append({'titulo': f'{etapa}: {b[0]}{extra}', 'ref': 'Brincadeira Dançada', 'corpo': b[1]})
+                    fontes.add('Brincadeira Dançada')
+                elif nome:
+                    etapas.append({'titulo': f'{etapa}: {nome_curto or nome}', 'ref': '', 'corpo': nome})
+                continue
+            etapas.append({'titulo': f'{etapa}', 'ref': '', 'corpo': conteudo.lstrip('→ ').capitalize() if conteudo.startswith('→') else conteudo})
+        fim = 'Fonte: ' + ' · '.join(sorted(fontes)) + '.\nQuer outra aula? É só pedir "outra" que eu te mando a da semana seguinte.'
+        rodape.append(fim)
+        partes = [f'**{titulo}**', intro]
+        for et in etapas:
+            partes.append(f"\n**{et['titulo']}**" + (f"\n_{et['ref']}_" if et['ref'] else '') + f"\n{et['corpo']}")
+        partes.append('\n' + '\n'.join(rodape))
+        estrutura = {'titulo': titulo, 'intro': intro, 'etapas': etapas, 'rodape': '\n'.join(rodape)}
+        return '\n'.join(partes), sorted(fontes), estrutura
+
+
+DOC_FAIXA = {'3-4': 'apostila-kids-modulos-a-h', '5-6': 'apostila-kids-2-5-6-anos', '7+': 'apostila-passo-1-7-anos'}
+
+
+def _chave(t):
+    return re.sub(r'[^a-z0-9 ]', ' ', norm(t)).split() and ' '.join(re.sub(r'[^a-z0-9 ]', ' ', norm(t)).split())
+
+
+def _limpa(t):
+    """Junta linhas quebradas do PDF ('...os dois\\nlados' -> '...os dois lados')."""
+    t = re.sub(r'[ \t]*\n[ \t]*/?[ \t]*', '\n', t.strip())
+    t = re.sub(r'(?<![.:!?])\n(?=[a-zà-ú0-9(])', ' ', t)
+    return re.sub(r'\n{2,}', '\n', t).strip()
+
+
+def _exercicio_md(txt):
+    """Texto completo da apostila, só reorganizado para ler no celular (nenhuma palavra trocada)."""
+    t = re.sub(r'^###.*\n', '', txt).strip()
+    obj = re.search(r'Objetivos:\s*(.+?)(?=\n\s*Desenvolvimento do exerc|\n\s*Materiais:|$)', t, re.S)
+    resto = t[obj.end():] if obj else t
+    resto = re.sub(r'^\s*Desenvolvimento do exerc[ií]cio\s*', '', resto.strip())
+    linhas = []
+    if obj:
+        itens = [i.strip(' .;') for i in _limpa(obj.group(1)).split('\n') if i.strip(' .;')]
+        linhas.append('*Objetivos:* ' + '; '.join(itens) + '.')
+    corpo = _limpa(resto)
+    for l in corpo.split('\n'):
+        l = l.strip()
+        if not re.search(r'\w', l): continue
+        m = re.match(r'(Materiais|Início|Inicio|Observação|Obs\.?|Dica)\s*:\s*(.*)', l)
+        linhas.append(f'*{m.group(1)}:* {m.group(2)}' if m else f'- {l}')
+    return '\n'.join(linhas)
 
 
 def eh_pedido(q):
@@ -130,7 +239,8 @@ class Fluxo:
         if not w: return None
         s.ult[sess] = {'faixa': faixa, 'n': w['n'], 'ensaio': ensaio}
         s.pend.pop(sess, None)
-        return ('aula', s.t.bloco(faixa, w), w)
+        txt, fontes, est = s.t.montar(faixa, w)
+        return ('aula', txt, w, fontes, est)
 
     def _com_faixa(s, sess, faixa, q, hoje=None):
         n = s.t.semana_hoje(faixa, hoje)
