@@ -27,10 +27,11 @@ HIST=collections.defaultdict(list)   # session -> [{"role","content"}] (sem trec
 USAGE=collections.defaultdict(int)   # (session, dia) -> msgs
 # --- Registro de uso da IA (tokens) por tipo: 'teste' ou 'assinante'. Vai para o Supabase; falha em silêncio, nunca derruba a resposta. ---
 TIPO=contextvars.ContextVar('tipo',default='assinante')
-def _enviar_uso(tipo,modelo,tin,tout):
+TEL=contextvars.ContextVar('tel',default=None)
+def _enviar_uso(tipo,modelo,tin,tout,tel=None):
     try:
         if not (SB_URL and SB_KEY): return
-        req=urllib.request.Request(SB_URL+'/rest/v1/rpc/log_uso',data=json.dumps({'p_tipo':tipo,'p_modelo':modelo,'p_in':tin,'p_out':tout}).encode(),
+        req=urllib.request.Request(SB_URL+'/rest/v1/rpc/log_uso',data=json.dumps({'p_tipo':tipo,'p_modelo':modelo,'p_in':tin,'p_out':tout,'p_tel':tel}).encode(),
             headers={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'})
         urllib.request.urlopen(req,timeout=10).read()
     except Exception: pass
@@ -39,7 +40,7 @@ def _envolver(msgs):
     def f(*a,**k):
         r=orig(*a,**k)
         try:
-            u=r.usage; threading.Thread(target=_enviar_uso,args=(TIPO.get(),str(k.get('model','')),int(u.input_tokens or 0),int(u.output_tokens or 0)),daemon=True).start()
+            u=r.usage; threading.Thread(target=_enviar_uso,args=(TIPO.get(),str(k.get('model','')),int(u.input_tokens or 0),int(u.output_tokens or 0),TEL.get()),daemon=True).start()
         except Exception: pass
         return r
     msgs.create=f
@@ -157,7 +158,7 @@ def chat(m:Msg):
     q=m.message.strip()
     if not q or len(q)>1500: raise HTTPException(400,'mensagem vazia ou longa demais')
     day=dt.date.today().isoformat(); k=(m.session,day)
-    TIPO.set('teste' if isinstance(ac,tuple) else 'assinante')
+    TIPO.set('teste' if isinstance(ac,tuple) else 'assinante'); TEL.set(ac[1] if isinstance(ac,tuple) else None)
     if isinstance(ac,tuple):
         if USAGE_T[ac[1]]>=MAXT: return {'turn':None,'resposta':f'Chegamos ao fim das {MAXT} perguntas do seu teste gratuito. Para continuar com a Rafa Assistente, conheça a assinatura do Você Bailarina: vocebailarina.com/assinatura. Qualquer dúvida, fale com a Thay no {SUPORTE}.','fontes':[]}
         USAGE_T[ac[1]]+=1
