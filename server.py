@@ -136,7 +136,7 @@ def teste(t:Teste,request:Request):
     if not (2<=len(nome)<=60): raise HTTPException(400,'Digite seu nome.')
     tel=tel_br(t.whatsapp)
     if not tel: raise HTTPException(400,'Por enquanto o teste é só para números do Brasil. Digite o DDD e o número, por exemplo (11) 91234-5678.')
-    try: r=reivindicar(tel,nome,(t.canal or '')[:30])
+    try: r=reivindicar(tel,nome,re.sub(r'[^a-z0-9_-]','',(t.canal or '').lower())[:30])
     except Exception as e:
         log({'erro_teste':str(e)}); raise HTTPException(503,'Não consegui registrar seu teste agora. Tente de novo em um minuto.')
     if r=='ja_usado': raise HTTPException(409,'Esse WhatsApp já usou o teste gratuito. Para continuar, conheça a assinatura: vocebailarina.com/assinatura')
