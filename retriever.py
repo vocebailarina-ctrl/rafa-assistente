@@ -11,7 +11,7 @@ SYN = {  # expansão simples de consulta
  'preco':'cobrar valor aula cobrança parceria porcentagem','cobrar':'preco valor parceria','valor':'preco cobrar',
  'birra':'choro chorar teimosia live como lidar com a birra nao quero fazer autoridade','barulho':'medo som sensibilidade birra como lidar com a birra autoridade musicas cantadas','atencao':'concentracao foco dispersa brincadeira combinados','prestando atencao':'concentracao foco dispersa brincadeira combinados autoridade','nao presta':'atencao concentracao foco autoridade combinados','dispers':'atencao concentracao foco','agitad':'tonicidade atencao energia brincadeira','bagunca':'autoridade combinados atencao','pe ruim':'trabalho de pes forca dos pes dedos dos pes pointe','pes ruins':'trabalho de pes forca dos pes dedos dos pes pointe','autista':'autismo neurodivergente neurodivergencia tea','autismo':'neurodivergente tea sinais de atencao observar','neurodivergente':'autismo sinais de atencao psicomotricidade',
  'espetaculo':'apresentacao show roteiro tema coreografia de sucesso 7 recursos','coreografia':'desenho coreografico deslocamento sequencia',
- 'baby':'mini baby 2 anos 3 anos pequenas','bebe':'baby 2 anos','pais':'mae familia responsaveis','mae':'pais familia',
+ 'baby':'mini baby 2 anos 3 anos pequenas','ano e meio':'psicomotricidade guia observacao mini baby 2 anos','1 ano':'psicomotricidade guia observacao mini baby 2 anos','18 meses':'psicomotricidade guia observacao mini baby 2 anos','bebe':'baby 2 anos','pais':'mae familia responsaveis','mae':'pais familia',
  'lembrancinha':'material lembranca presente mimo','datas':'comemorativas tematica dia das maes pascoa festa junina',
  'planejamento':'planner formula trilha semana modulo','musica':'trilha sonora playlist andamento',
 }
