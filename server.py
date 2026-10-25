@@ -40,7 +40,7 @@ def _envolver(msgs):
     def f(*a,**k):
         r=orig(*a,**k)
         try:
-            u=r.usage; threading.Thread(target=_enviar_uso,args=(TIPO.get(),str(k.get('model','')),int(u.input_tokens or 0),int(u.output_tokens or 0),TEL.get()),daemon=True).start()
+            u=r.usage; threading.Thread(target=_enviar_uso,args=(TIPO.get(),str(k.get('model','')),int(u.input_tokens or 0)+int(getattr(u,'cache_creation_input_tokens',0) or 0)+int(getattr(u,'cache_read_input_tokens',0) or 0),int(u.output_tokens or 0),TEL.get()),daemon=True).start()
         except Exception: pass
         return r
     msgs.create=f
