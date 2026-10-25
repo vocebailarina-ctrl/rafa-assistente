@@ -25,7 +25,7 @@ FAIXA_TITULO = {'3-4': '3 a 4 anos (VBK 1)', '5-6': '5 a 6 anos (VBK 2)', '7+': 
 PEDIDO = re.compile(
     r'aula (completa|pronta|inteira|toda|do dia|da semana|para (amanha|hoje|essa semana|esta semana))'
     r'|plano de aula|planejamento da aula|roteiro de aula|roteiro da aula|planejar (uma |a )?aula|montar (uma |a )?aula'
-    r'|(monta|manda|mandar|me da|me de|me traga|me traz|traz|traga|passa|passar|sugere|sugerir|preciso de|quero|tem) (uma |a )?aula\b'
+    r'|(monta|monte|crie|elabore|faca|faz|manda|mandar|me da|me de|me traga|me traz|traz|traga|passa|passar|sugere|sugerir|preciso de|quero|tem) (uma |a )?aula\b'
     r'|^\s*(uma )?aula (de ballet |de bale |de bale infantil )?(para|pra|p/) (criancas|alunas|turma|minha|meninas|\d)'
     r'|o que (eu )?(dou|faco|vou dar|posso dar) (na|de|em|nessa|na minha) aula|(tem|existe|qual) (uma |a )?trilha (a seguir|para seguir|pra seguir)'
     r'|exercicios (desta|dessa|da) aula|qual aula (eu )?(dou|faco|vou dar|posso dar|darei|aplico)')
