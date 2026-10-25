@@ -1,7 +1,7 @@
 """Rafa Assistente — servidor web de teste (FastAPI).
 Reaproveita src/retriever.py e src/assistente.py. Logs em app/data/conversas.jsonl.
 Env: ANTHROPIC_API_KEY, ACCESS_CODE (código que as professoras digitam), ADMIN_CODE (painel de logs), MAX_MSGS_DIA (padrão 40)."""
-import os, sys, json, time, uuid, re, collections, datetime as dt, hmac, hashlib, base64, urllib.request
+import os, sys, json, time, uuid, re, collections, datetime as dt, hmac, hashlib, base64, urllib.request, threading, contextvars
 HERE=os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE); os.chdir(HERE); os.makedirs('data',exist_ok=True)
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
@@ -25,6 +25,29 @@ app=FastAPI(title='Rafa Assistente')
 A=Assistente()
 HIST=collections.defaultdict(list)   # session -> [{"role","content"}] (sem trechos)
 USAGE=collections.defaultdict(int)   # (session, dia) -> msgs
+# --- Registro de uso da IA (tokens) por tipo: 'teste' ou 'assinante'. Vai para o Supabase; falha em silêncio, nunca derruba a resposta. ---
+TIPO=contextvars.ContextVar('tipo',default='assinante')
+def _enviar_uso(tipo,modelo,tin,tout):
+    try:
+        if not (SB_URL and SB_KEY): return
+        req=urllib.request.Request(SB_URL+'/rest/v1/rpc/log_uso',data=json.dumps({'p_tipo':tipo,'p_modelo':modelo,'p_in':tin,'p_out':tout}).encode(),
+            headers={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'})
+        urllib.request.urlopen(req,timeout=10).read()
+    except Exception: pass
+def _envolver(msgs):
+    orig=msgs.create
+    def f(*a,**k):
+        r=orig(*a,**k)
+        try:
+            u=r.usage; threading.Thread(target=_enviar_uso,args=(TIPO.get(),str(k.get('model','')),int(u.input_tokens or 0),int(u.output_tokens or 0)),daemon=True).start()
+        except Exception: pass
+        return r
+    msgs.create=f
+try:
+    _envolver(A.c.messages)
+    _rc=getattr(A.r,'client',None)
+    if _rc is not None and _rc is not A.c: _envolver(_rc.messages)
+except Exception: pass
 FL=Fluxo(Trilhas(A.r.chunks))         # aula completa a partir das trilhas
 SEEN=collections.defaultdict(set)    # session -> (doc,section) já entregues no assunto atual
 LASTQ={}                             # session -> consulta do assunto atual (para 'outra opção')
@@ -128,6 +151,7 @@ def chat(m:Msg):
     q=m.message.strip()
     if not q or len(q)>1500: raise HTTPException(400,'mensagem vazia ou longa demais')
     day=dt.date.today().isoformat(); k=(m.session,day)
+    TIPO.set('teste' if isinstance(ac,tuple) else 'assinante')
     if isinstance(ac,tuple):
         if USAGE_T[ac[1]]>=MAXT: return {'turn':None,'resposta':f'Chegamos ao fim das {MAXT} perguntas do seu teste gratuito. Para continuar com a Rafa Assistente, conheça a assinatura do Você Bailarina: vocebailarina.com/assinatura. Qualquer dúvida, fale com a Thay no {SUPORTE}.','fontes':[]}
         USAGE_T[ac[1]]+=1
