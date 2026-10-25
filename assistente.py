@@ -34,11 +34,44 @@ REGRAS
 22. Turma de 2 anos, 1 ano e meio ou "bebês": o Mini Baby (aula Mini Baby: circuito mágico até o castelo da Fada Madrinha) é a primeira indicação. Diga que o Mini Baby é pensado para 2 anos e também atende turmas com crianças de 1 ano e meio. Entregue-o completo e ofereça as demais opções depois.
 23. Pedido de espetáculo ou de outra opção sobre espetáculo: entre as opções, inclua sempre o curso Coreografia de Sucesso (os 7 recursos para coreografar) além do planejamento do espetáculo e dos 5 Temas.
 24. Problema de comportamento (birra, choro, "não quero fazer", medo de barulho, agitação) junto com pedido de exercícios, músicas ou aula: responda em DUAS partes. Primeiro, como lidar com a situação, com os textos da live "Como lidar com a birra" (e, se vier no conteúdo, "Como convencer a criança quando ela diz não quero fazer"), entregues já prontos e na linguagem da Rafa; sem diagnosticar (regra 4), em medo de barulho observe os fatos e converse com a família. Depois, ofereça uma aula mais divertida que ajuda a criança a ficar receptiva (por exemplo Músicas Cantadas, porque a música e a letra criam empatia) e pergunte se quer que você mande completa. Pode chegar a ~350 palavras.
+25. Pedido de aula "animada", "divertida", "dinâmica" ou "lúdica": NÃO existe uma aula pronta com esse nome, então MONTE a aula misturando partes do conteúdo (texto fiel, sem inventar), na ordem: (a) aquecimento da Brincadeira Dançada (andadas diversas); (b) 1 a 2 exercícios das apostilas que usam os materiais do VB, que as crianças adoram, como o pas de chat com o jacaré e o exercício de transferência de peso com o jacaré (Kids 1, Mód. D, Ex. 5 e 6), ou o equivalente da idade que vier no bloco <aula_animada>; (c) 1 exercício de diagonal ou desafio do circuito (aula Mini Baby: circuito mágico); (d) 1 brincadeira do Hora de Brincar ou da Brincadeira Dançada (ex.: Pulando o Jacaré, Jacarezinhos); (e) se couber, uma cantiga das Músicas Cantadas. Diga em uma linha de onde veio cada parte e ofereça trocar qualquer peça. Se a idade não foi dita, pergunte só a idade (regra 9). Até ~450 palavras.
 """
 
 import re as _re
 _NUM=r'(\d+(?:\s*(?:e|a|ou)\s*\d+)?)\s*anos'
 FAIXA_TXT={'2-3':'2 a 3','3-4':'3 a 4','5-6':'5 a 6','7+':'7'}
+
+_ANIM=_re.compile(r'animad|divertid|dinamic|ludic|alegre|brincalhon')
+def _norm_q(t):
+    import unicodedata
+    return ''.join(c for c in unicodedata.normalize('NFD',t.lower()) if unicodedata.category(c)!='Mn')
+
+_ANIM_APOSTILA={'2-3':('apostila-kids-modulos-a-h',('Mód. D · Ex. 5','Mód. D · Ex. 6','Mód. D · Ex. 7')),
+ '3-4':('apostila-kids-modulos-a-h',('Mód. D · Ex. 5','Mód. D · Ex. 6','Mód. D · Ex. 7')),
+ '5-6':('apostila-kids-2-5-6-anos',('Mód. A · Ex. 5','Mód. A · Ex. 6','Mód. B · Ex. 2')),
+ '7+':('apostila-passo-1-7-anos',('Mód. B · Ex. 2',))}
+
+def _bloco_animada(r,age):
+    """Peças para montar uma aula animada: aquecimento e brincadeiras (Brincadeira Dançada, Hora de Brincar),
+    desafios do circuito, Músicas Cantadas e exercícios das apostilas com os materiais do VB (jacaré), pela idade."""
+    pecas=[]
+    def pega(doc,sec=None,idx=None,maxn=2):
+        n=0
+        for c in r.chunks:
+            if c['doc']!=doc: continue
+            if sec and not c['section'].startswith(sec): continue
+            if idx is not None and c['i'] not in idx: continue
+            pecas.append(c); n+=1
+            if n>=maxn: break
+    pega('brincadeira-dancada-videos-rafa','Brincadeiras',maxn=1)
+    pega('curso-hora-de-brincar','As brincadeiras',maxn=1)
+    pega('aula-mini-baby-circuito-fada-madrinha',idx=(4,5),maxn=2)
+    pega('curso-musicas-cantadas',maxn=1)
+    ap=_ANIM_APOSTILA.get(age)
+    if ap:
+        for sec in ap[1]: pega(ap[0],sec,maxn=1)
+    if not pecas: return ""
+    return "\n\n<aula_animada>\n"+"\n\n".join(f"<conteudo fonte=\"{c['title']}\" secao=\"{c['section']}\">\n{c['text']}\n</conteudo>" for c in pecas)+"\n</aula_animada>"
 
 def montar_mensagem(r,q,qbusca,excluir=None,outra=False):
     """Retorna (user_content, ctx, exs). Mesmo caminho para o servidor e para o teste em linha de comando.
@@ -50,8 +83,12 @@ def montar_mensagem(r,q,qbusca,excluir=None,outra=False):
     bloco_ex=""
     if exs:
         bloco_ex="\n\n".join(f"<exercicio_apostila exato=\"{'sim' if ok else 'nao'}\" referencia=\"{e['rotulo']}\" apostila=\"{e['apostila']}\" idade_pedida_texto=\"{idade}\">\n{e['text']}\n</exercicio_apostila>" for sc,e,ok in exs)+"\n\n"
+    extra=""
+    if _ANIM.search(_norm_q(q)) or _ANIM.search(_norm_q(qbusca)):
+        extra=_bloco_animada(r,age)
     blocks="\n\n".join(f"<conteudo fonte=\"{c['title']}\" secao=\"{c['section']}\" faixa=\"{c['faixa']}\">\n{c['text']}\n</conteudo>" for c in ctx)
     pref="[PEDIDO DE OUTRA OPÇÃO] Assunto anterior: "+qbusca[:300]+"\n\n" if outra else ""
+    blocks=blocks+extra
     return f"{bloco_ex}<conteudos>\n{blocks}\n</conteudos>\n\n{pref}Pergunta da professora: {q}", ctx, exs
 
 def mensagem_trilha(bloco,q):
