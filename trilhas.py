@@ -38,7 +38,7 @@ SIM = re.compile(r'^\s*(sim|s|ss|isso|esta|estamos|ja|ja estamos|estou|to|ta|com
 NAO = re.compile(r'^\s*(nao|n|ainda nao|nem)\b|sem (espetaculo|ensaio)|nao (tem|temos|vai ter|vamos ter|estamos|esta|estou)|nao ensai')
 ESPECIAL = re.compile(r'aula especial|aula tematica|ensaio com figurino')
 AGE_PAT = [(r'\b(3|tres|4|quatro) anos|kids ?1|vbk ?1', '3-4'), (r'\b(5|cinco|6|seis) anos|kids ?2|vbk ?2', '5-6'),
-           (r'\b(7|sete|8|oito|9|nove|10|dez|11|onze|12|doze) anos|\b7 ?\+|passo ?1', '7+'), (r'\b(2|dois) anos|\bbaby\b|\bbebe', '2-3')]
+           (r'\b(7|sete|8|oito|9|nove|10|dez|11|onze|12|doze) anos|\b7 ?\+|passo ?1', '7+'), (r'\b(2|dois) anos|\bbaby\b|\bbebe|ano e meio|\b(1|um) ano\b|\b(12|15|18|20|22) meses', '2-3')]
 
 
 def idades(q):
@@ -231,7 +231,7 @@ def eh_pedido(q):
 
 
 NOTA_BABY = ('A Trilha anual começa em 3 anos. Para a sua turma de 2 anos, esta é a aula da trilha de 3 a 4 anos (Kids 1), '
-             'a mais próxima.')
+             'a mais próxima. Para essa idade (inclusive crianças de 1 ano e meio) a Rafa também tem a aula Mini Baby, o circuito mágico até o castelo da Fada Madrinha: é só pedir "Mini Baby" que eu mando completa.')
 ROTULO = {'3-4': '3 a 4 anos', '5-6': '5 a 6 anos', '7+': '7 anos ou mais'}
 
 
