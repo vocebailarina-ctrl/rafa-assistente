@@ -32,8 +32,8 @@ REGRAS
 20. Quando a mensagem disser [PEDIDO DE OUTRA OPÇÃO], a professora quer uma alternativa ao que você já mandou sobre o mesmo assunto: entregue UMA opção diferente das anteriores (o conteúdo que acompanha já exclui o que foi entregue), sem repetir a anterior nem pedir desculpas. Se não houver outra opção no conteúdo, diga que essas eram as opções da Rafa sobre isso e ofereça ajudar a adaptar a que ela preferir.
 21. Pedido de ideias ou de aula nova ("novas ideias de aula", "que aula posso dar", "outra aula"): entregue UMA aula ou brincadeira completa (regra 18) e, no fim, ofereça POR NOME, em uma linha, as outras aulas divertidas da assinatura que cabem na idade da turma, para ela escolher qual quer completa: Brincadeira Dançada, Hora de Brincar, Músicas Cantadas, aula historiada e circuito da Fada Madrinha (use só as que vierem no conteúdo e cuja faixa sirva). Oferecer pelo nome nessa lista de escolha é permitido; quando ela escolher, descreva por completo (regra 18).
 22. Turma de 2 anos, 1 ano e meio ou "bebês": o Mini Baby (aula Mini Baby: circuito mágico até o castelo da Fada Madrinha) é a primeira indicação; quando vier o bloco <mini_baby>, entregue a aula completa (etapa por etapa, com os materiais) e ofereça as demais opções depois. Para 1 ano e meio (ou menos), diga com carinho que balé não é indicado para essa idade; a criança pode se encaixar numa aula de 2 anos, mas o olhar da professora precisa ser outro, o da psicomotricidade (use o guia de observação de Psicomotricidade do conteúdo, sem diagnosticar, regra 4). Aqui o progresso não é técnica: a criança estar na sala, se divertir, mostrar interesse ou tentar um exercício já é um grande avanço. Sugira simplificar (menos etapas, mais ajuda da professora) e observar, sem cobrar execução.
-23. Pedido de espetáculo ou de outra opção sobre espetáculo: entre as opções, inclua sempre o curso Coreografia de Sucesso (os 7 recursos para coreografar) além do planejamento do espetáculo e dos 5 Temas.
-24. Problema de comportamento (birra, choro, "não quero fazer", medo de barulho, agitação) junto com pedido de exercícios, músicas ou aula: responda em DUAS partes. Primeiro, como lidar com a situação, com os textos da live "Como lidar com a birra" (e, se vier no conteúdo, "Como convencer a criança quando ela diz não quero fazer"), entregues já prontos e na linguagem da Rafa; sem diagnosticar (regra 4), em medo de barulho observe os fatos e converse com a família. Depois, ofereça uma aula mais divertida que ajuda a criança a ficar receptiva (por exemplo Músicas Cantadas, porque a música e a letra criam empatia) e pergunte se quer que você mande completa. Pode chegar a ~350 palavras.
+23. Pedido de espetáculo: entregue o planejamento (regra 18). Se a professora pedir OUTRA OPÇÃO sobre espetáculo, a próxima opção é o curso Coreografia de Sucesso (os 7 recursos para coreografar): entregue-o já pronto a partir do bloco <coreografia_de_sucesso>, sem repetir o que já foi entregue.
+24. Problema de comportamento (birra, choro, "não quero fazer", medo de barulho, agitação) junto com pedido de exercícios, músicas ou aula: responda em DUAS partes. Primeiro, como lidar com a situação: entregue já prontas as estratégias da live "Como lidar com a birra" que vierem no bloco <live_birra>, nas palavras da Rafa e com exemplos (nunca diga que só tem "o começo" da live quando o bloco veio); se vier no conteúdo, cite também a live "Não quero fazer". Sem diagnosticar (regra 4): em medo de barulho, observe os fatos e converse com a família como parceria. Depois, ofereça uma aula mais divertida que ajuda a criança a ficar receptiva (por exemplo Músicas Cantadas, porque a música e a letra criam empatia) e pergunte se quer que você mande completa. Pode chegar a ~450 palavras.
 25. Pedido de aula "animada", "divertida", "dinâmica" ou "lúdica": NÃO existe uma aula pronta com esse nome, então MONTE a aula misturando partes do conteúdo (texto fiel, sem inventar), na ordem: (a) aquecimento da Brincadeira Dançada (andadas diversas); (b) 1 a 2 exercícios das apostilas que usam os materiais do VB, que as crianças adoram, como o pas de chat com o jacaré e o exercício de transferência de peso com o jacaré (Kids 1, Mód. D, Ex. 5 e 6), ou o equivalente da idade que vier no bloco <aula_animada>; (c) 1 exercício de diagonal ou desafio do circuito (aula Mini Baby: circuito mágico); (d) 1 brincadeira do Hora de Brincar ou da Brincadeira Dançada (ex.: Pulando o Jacaré, Jacarezinhos); (e) se couber, uma cantiga das Músicas Cantadas. Diga em uma linha de onde veio cada parte e ofereça trocar qualquer peça. Se a idade não foi dita, pergunte só a idade (regra 9). Até ~450 palavras.
 """
 
@@ -79,6 +79,20 @@ def _bloco_mini(r):
     if not ch: return ""
     return "\n\n<mini_baby>\n"+"\n\n".join(f"<conteudo fonte=\"{c['title']}\" secao=\"{c['section']}\">\n{c['text']}\n</conteudo>" for c in ch)+"\n</mini_baby>"
 
+_BIRRA=_re.compile(r'birra|choro|chorando|medo de barulho|nao quero fazer|nao quer fazer')
+_ESPET=_re.compile(r'espetaculo|apresentacao de fim de ano')
+def _blocos_doc(r,doc,idx,tag):
+    ch=[c for c in r.chunks if c['doc']==doc and c['i'] in idx]
+    if not ch: return ""
+    return f"\n\n<{tag}>\n"+"\n\n".join(f"<conteudo fonte=\"{c['title']}\" secao=\"{c['section']}\">\n{c['text']}\n</conteudo>" for c in ch)+f"\n</{tag}>"
+
+def _bloco_temas(r,qn,outra):
+    """Birra: texto da live. Espetáculo (outra opção): curso Coreografia de Sucesso."""
+    out=""
+    if _BIRRA.search(qn): out+=_blocos_doc(r,'live-como-lidar-com-a-birra',(1,2,3,4,5,6,7,8,9,16,17),'live_birra')
+    if outra and _ESPET.search(qn): out+=_blocos_doc(r,'curso-coreografia-de-sucesso',(1,2,3,4,5,6,7,8),'coreografia_de_sucesso')
+    return out
+
 def montar_mensagem(r,q,qbusca,excluir=None,outra=False):
     """Retorna (user_content, ctx, exs). Mesmo caminho para o servidor e para o teste em linha de comando.
     excluir: (doc,section) já entregues; outra: a professora pediu outra opção."""
@@ -94,6 +108,7 @@ def montar_mensagem(r,q,qbusca,excluir=None,outra=False):
         extra=_bloco_animada(r,age)
     if age=='2-3':
         extra+=_bloco_mini(r)
+    extra+=_bloco_temas(r,_norm_q(q)+' '+_norm_q(qbusca),outra)
     blocks="\n\n".join(f"<conteudo fonte=\"{c['title']}\" secao=\"{c['section']}\" faixa=\"{c['faixa']}\">\n{c['text']}\n</conteudo>" for c in ctx)
     pref="[PEDIDO DE OUTRA OPÇÃO] Assunto anterior: "+qbusca[:300]+"\n\n" if outra else ""
     blocks=blocks+extra
