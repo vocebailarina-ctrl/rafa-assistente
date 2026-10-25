@@ -37,7 +37,7 @@ OUTRA = re.compile(r'^\s*(e )?(outra|mais uma|a proxima|proxima|me da outra|mand
 SIM = re.compile(r'^\s*(sim|s|ss|isso|esta|estamos|ja|ja estamos|estou|to|ta|com certeza|claro)\b|esta(mos)? ensaiando|ja comecamos|temos espetaculo|vai ter espetaculo')
 NAO = re.compile(r'^\s*(nao|n|ainda nao|nem)\b|sem (espetaculo|ensaio)|nao (tem(?! problema)|temos(?! problema)|vai ter|vamos ter|estamos|esta|estou)|nao ensai')
 ESPECIAL = re.compile(r'aula especial|aula tematica|ensaio com figurino')
-AGE_PAT = [(r'\b(3|tres|4|quatro) anos|kids ?1|vbk ?1', '3-4'), (r'\b(5|cinco|6|seis) anos|kids ?2|vbk ?2', '5-6'),
+AGE_PAT = [(r'\b(3|tres|4|quatro) anos|kids ?1|vbk ?1', '3-4'), (r'\b(5|cinco|6|seis) anos|kids ?2|vbk ?2|pre[ -]?bal+e?t?', '5-6'),
            (r'\b(7|sete|8|oito|9|nove|10|dez|11|onze|12|doze) anos|\b7 ?\+|passo ?1', '7+'), (r'\b(2|dois) anos|\bbaby\b|\bbebe|ano e meio|\b(1|um) ano\b|\b(12|15|18|20|22) meses', '2-3')]
 
 

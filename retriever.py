@@ -15,7 +15,7 @@ SYN = {  # expansão simples de consulta
  'lembrancinha':'material lembranca presente mimo','datas':'comemorativas tematica dia das maes pascoa festa junina',
  'planejamento':'planner formula trilha semana modulo','musica':'trilha sonora playlist andamento',
 }
-AGE = [(r'\b(2|dois) anos|\bbaby\b|\bbebe|ano e meio|\b(1|um) ano\b|\b(12|15|18|20|22) meses','2-3'),(r'\b(3|tres) anos|\b(4|quatro) anos','3-4'),(r'\b(5|cinco) anos|\b(6|seis) anos','5-6'),(r'\b(7|sete|8|oito|9|nove|10|dez) anos|\b(7|sete)\+','7+')]
+AGE = [(r'\b(2|dois) anos|\bbaby\b|\bbebe|ano e meio|\b(1|um) ano\b|\b(12|15|18|20|22) meses','2-3'),(r'\b(3|tres) anos|\b(4|quatro) anos','3-4'),(r'\b(5|cinco) anos|\b(6|seis) anos|pre[ -]?bal+e?t?\b','5-6'),(r'\b(7|sete|8|oito|9|nove|10|dez) anos|\b(7|sete)\+','7+')]
 COMPAT = {'2-3':{'2-3','3-4','3-6','todas','3-7'},'3-4':{'3-4','3-6','todas','3-7','2-3'},'5-6':{'5-6','3-6','4-6','todas','3-7'},'7+':{'7+','todas'}}
 
 class Retriever:
