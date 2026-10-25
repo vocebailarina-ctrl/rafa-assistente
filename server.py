@@ -90,6 +90,12 @@ def tel_br(x):
     if d.startswith('55') and len(d)==13: d=d[2:]
     if len(d)!=11 or d[0]=='0' or d[1]=='0' or d[2]!='9': return None   # celular brasileiro: DDD + 9 + 8 dígitos
     return '55'+d
+CANAIS={'instagram','site','exassinantes','assinantes','teste-claude'}
+def _canal(x):
+    """Canal do link (?c=): minúsculas, sem pontuação; só aceita a lista fixa, o resto vira 'outro' (vazio = 'site')."""
+    c=re.sub(r'[^a-z0-9_-]','',(x or '').lower())[:30]
+    if not c: return 'site'
+    return c if c in CANAIS else 'outro'
 def reivindicar(tel,nome,canal):
     """Registra o número. Devolve 'ok' | 'ja_usado' | 'teto'. Supabase se configurado; senão arquivo local (apagado a cada deploy)."""
     if SB_URL and SB_KEY:
@@ -136,7 +142,7 @@ def teste(t:Teste,request:Request):
     if not (2<=len(nome)<=60): raise HTTPException(400,'Digite seu nome.')
     tel=tel_br(t.whatsapp)
     if not tel: raise HTTPException(400,'Por enquanto o teste é só para números do Brasil. Digite o DDD e o número, por exemplo (11) 91234-5678.')
-    try: r=reivindicar(tel,nome,re.sub(r'[^a-z0-9_-]','',(t.canal or '').lower())[:30])
+    try: r=reivindicar(tel,nome,_canal(t.canal))
     except Exception as e:
         log({'erro_teste':str(e)}); raise HTTPException(503,'Não consegui registrar seu teste agora. Tente de novo em um minuto.')
     if r=='ja_usado': raise HTTPException(409,'Esse WhatsApp já usou o teste gratuito. Para continuar, conheça a assinatura: vocebailarina.com/assinatura')
