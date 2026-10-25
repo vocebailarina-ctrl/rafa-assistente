@@ -36,6 +36,7 @@ REGRAS
 24. Problema de comportamento (birra, choro, "não quero fazer", medo de barulho, agitação) junto com pedido de exercícios, músicas ou aula: responda em DUAS partes. Primeiro, como lidar com a situação: entregue já prontas as estratégias da live "Como lidar com a birra" que vierem no bloco <live_birra>, nas palavras da Rafa e com exemplos (nunca diga que só tem "o começo" da live quando o bloco veio); se vier no conteúdo, cite também a live "Não quero fazer". Sem diagnosticar (regra 4): em medo de barulho, observe os fatos e converse com a família como parceria. Depois, ofereça uma aula mais divertida que ajuda a criança a ficar receptiva (por exemplo Músicas Cantadas, porque a música e a letra criam empatia) e pergunte se quer que você mande completa. Pode chegar a ~450 palavras.
 25. Pedido de aula "animada", "divertida", "dinâmica" ou "lúdica": NÃO existe uma aula pronta com esse nome, então MONTE a aula misturando partes do conteúdo (texto fiel, sem inventar), na ordem: (a) aquecimento da Brincadeira Dançada (andadas diversas); (b) 1 a 2 exercícios das apostilas que usam os materiais do VB, que as crianças adoram, como o pas de chat com o jacaré e o exercício de transferência de peso com o jacaré (Kids 1, Mód. D, Ex. 5 e 6), ou o equivalente da idade que vier no bloco <aula_animada>; (c) 1 exercício de diagonal ou desafio do circuito (aula Mini Baby: circuito mágico); (d) 1 brincadeira do Hora de Brincar ou da Brincadeira Dançada (só as que estiverem no conteúdo recebido); (e) se couber, uma cantiga das Músicas Cantadas. Diga em uma linha de onde veio cada parte e ofereça trocar qualquer peça. Se a idade não foi dita, pergunte só a idade (regra 9). Até ~450 palavras.
 26. "Pré-balé" / "pré-ballet" é o Kids 2 (Apostila Kids 2 e trilha 5 a 6 anos). NUNCA diga que pré-balé é "3 a 5 anos" nem pergunte a idade: trate como turma de 5 a 6 anos e entregue a aula pronta com o conteúdo recebido.
+27. Balé adulto: quando a professora pedir aula de balé adulto, ENTREGUE a aula do bloco <aula_adulta> (curso Você Bailarina Adulta: aquecimento no centro, barra, centro), pronta e fiel ao conteúdo. Turma de 9 a 12 anos: diga em uma frase que para 9 anos a Rafa tem a aula do Passo 1 (trilha 7+) e que depois, no início do intermediário, vale a aula do curso Adulta; ofereça a aula da trilha 7+ ("é só pedir") e entregue a aula do curso Adulta do bloco <aula_adulta> adaptada ao nível da turma (menos repetições, mais ajuda). Nunca invente exercícios fora do bloco.
 """
 
 import re as _re
@@ -76,6 +77,13 @@ def _bloco_animada(r,age):
     if not pecas: return ""
     return "\n\n<aula_animada>\n"+"\n\n".join(f"<conteudo fonte=\"{c['title']}\" secao=\"{c['section']}\">\n{c['text']}\n</conteudo>" for c in pecas)+"\n</aula_animada>"
 
+_ADULTA=_re.compile(r'adult|(9|10|11|12) ?(a|e|ate) ?12 anos|9 ?a ?12|de 9 a|intermediari')
+def _bloco_adulta(r):
+    """Balé adulto / 9 a 12 anos: entrega a aula do curso Você Bailarina Adulta (iniciante, serve para intermediário)."""
+    ch=[c for c in r.chunks if c['doc']=='curso-ballet-adulta' and c['i'] in (1,2,3,4)]
+    if not ch: return ""
+    return "\n\n<aula_adulta>\n"+"\n\n".join(f"<conteudo fonte=\"{c['title']}\" secao=\"{c['section']}\">\n{c['text']}\n</conteudo>" for c in ch)+"\n</aula_adulta>"
+
 def _bloco_mini(r):
     """Turmas de 2 anos / 1 ano e meio: garante a aula Mini Baby (circuito mágico) no conteúdo."""
     ch=[c for c in r.chunks if c['doc']=='aula-mini-baby-circuito-fada-madrinha' and c['i'] in (1,3,4,5,6)]
@@ -111,6 +119,8 @@ def montar_mensagem(r,q,qbusca,excluir=None,outra=False):
         extra=_bloco_animada(r,age)
     if age=='2-3':
         extra+=_bloco_mini(r)
+    if _ADULTA.search(_norm_q(q)+' '+_norm_q(qbusca)):
+        extra+=_bloco_adulta(r)
     extra+=_bloco_temas(r,_norm_q(q)+' '+_norm_q(qbusca),outra)
     blocks="\n\n".join(f"<conteudo fonte=\"{c['title']}\" secao=\"{c['section']}\" faixa=\"{c['faixa']}\">\n{c['text']}\n</conteudo>" for c in ctx)
     pref="[PEDIDO DE OUTRA OPÇÃO] Assunto anterior: "+qbusca[:300]+"\n\n" if outra else ""
