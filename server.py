@@ -194,7 +194,7 @@ def chat(m:Msg):
         fontes=sorted(set(c['title'] for c in ctx))
     msgs=hist+[{"role":"user","content":content}]
     try:
-        r=A.c.messages.create(model="claude-sonnet-5-5",max_tokens=1600,thinking={"type":"between_tools"},system=SYSTEM,messages=msgs)
+        r=A.c.messages.create(model="claude-sonnet-5-5",max_tokens=1600,thinking={"type":"between_tools"},system=[{"type":"text","text":SYSTEM,"cache_control":{"type":"ephemeral"}}],messages=msgs)
         txt="".join(b.text for b in r.content if b.type=="text")
     except Exception as e:
         log({'session':m.session,'nome':m.nome,'q':q,'erro':str(e),'modo':modo})

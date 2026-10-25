@@ -67,6 +67,7 @@ def _bloco_animada(r,age):
             if n>=maxn: break
     pega('brincadeira-dancada-videos-rafa','Brincadeiras',maxn=1)
     pega('curso-hora-de-brincar','As brincadeiras',maxn=1)
+    if age in ('2-3','3-4','5-6'): pega('brincadeira-dancada',idx=(5,6),maxn=2)   # Pulando o Jacaré (descrição escrita na apostila)
     pega('aula-mini-baby-circuito-fada-madrinha',idx=(4,5),maxn=2)
     pega('curso-musicas-cantadas',maxn=1)
     ap=_ANIM_APOSTILA.get(age)
@@ -134,7 +135,7 @@ class Assistente:
     def answer(s,q,history=None):
         content,ctx,_=montar_mensagem(s.r,q,q)
         msgs=(history or [])+[{"role":"user","content":content}]
-        r=s.c.messages.create(model="claude-sonnet-5-5",max_tokens=2500,thinking={"type":"between_tools"},system=SYSTEM,messages=msgs)
+        r=s.c.messages.create(model="claude-sonnet-5-5",max_tokens=2500,thinking={"type":"between_tools"},system=[{"type":"text","text":SYSTEM,"cache_control":{"type":"ephemeral"}}],messages=msgs)
         return "".join(b.text for b in r.content if b.type=="text"), ctx
 
 if __name__=='__main__':

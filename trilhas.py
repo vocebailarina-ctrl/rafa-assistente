@@ -328,7 +328,7 @@ class Fluxo:
         if u and OUTRA.search(nq):
             return s._entregar(sess, u['faixa'], u['n'], u['ensaio'], avancar=True, nota=u.get('nota'))
         if not eh_pedido(q): return None
-        ids = idades(q) or idades(anterior)
+        ids = idades(q) or idades(anterior) or next((i for i in (idades(u) for u in reversed(list(usuarias)[-4:])) if i), set())   # idade dita antes (ex.: 'baby class') não se pergunta de novo
         if not ids:
             s.pend[sess] = {'etapa': 'idade'}
             return ('perguntar', PERG_IDADE)
