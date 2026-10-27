@@ -204,6 +204,49 @@ def chat(m:Msg):
     log({'session':m.session,'nome':m.nome,'turn':turn,'q':q,'a':txt,'fontes':fontes,'modo':modo,'seg':round(time.time()-t0,1)})
     return {'turn':turn,'resposta':txt,'fontes':fontes}
 
+# --- Aviso de carrinho abandonado (Kiwify -> WhatsApp da equipe) ---
+# Env: KIWIFY_WEBHOOK_TOKEN (token do webhook), WA_TOKEN, WA_PHONE_ID (WhatsApp Cloud API), AVISO_TEL (número da Thay, 55DDDNÚMERO),
+# AVISO_TEMPLATE (nome do template aprovado, 5 variáveis: nome, telefone, produto, e-mail, tipo), AVISO_LANG (padrão pt_BR).
+VISTOS=collections.OrderedDict()
+def _pick(d,*keys):
+    for k in keys:
+        cur=d
+        for part in k.split('.'):
+            cur=cur.get(part) if isinstance(cur,dict) else None
+        if cur not in (None,''): return str(cur)
+    return ''
+def _wa_enviar(vars5):
+    tok=os.environ.get('WA_TOKEN',''); pid=os.environ.get('WA_PHONE_ID',''); to=re.sub(r'\D','',os.environ.get('AVISO_TEL',''))
+    tpl=os.environ.get('AVISO_TEMPLATE',''); lang=os.environ.get('AVISO_LANG','pt_BR')
+    if not (tok and pid and to and tpl): return 'sem_config'
+    body={'messaging_product':'whatsapp','to':to,'type':'template','template':{'name':tpl,'language':{'code':lang},
+          'components':[{'type':'body','parameters':[{'type':'text','text':(v or '-')[:200]} for v in vars5]}]}}
+    req=urllib.request.Request(f'https://graph.facebook.com/v21.0/{pid}/messages',data=json.dumps(body).encode(),
+        headers={'Authorization':'Bearer '+tok,'Content-Type':'application/json'})
+    try:
+        urllib.request.urlopen(req,timeout=15).read(); return 'enviado'
+    except Exception as e: return 'erro:'+type(e).__name__
+@app.post('/webhook/kiwify')
+async def webhook_kiwify(request:Request):
+    raw=await request.body()
+    token=os.environ.get('KIWIFY_WEBHOOK_TOKEN','')
+    if not token: raise HTTPException(503,'não configurado')
+    esperado=hmac.new(token.encode(),raw,hashlib.sha1).hexdigest()
+    if not hmac.compare_digest(request.query_params.get('signature','').lower(),esperado): raise HTTPException(401,'assinatura inválida')
+    try: ev=json.loads(raw.decode('utf-8'))
+    except Exception: raise HTTPException(400,'json inválido')
+    tipo=_pick(ev,'webhook_event_type') or ('carrinho_abandonado' if 'order_status' not in ev else '')
+    if tipo not in ('carrinho_abandonado','abandoned_cart'): return {'ok':True,'ignorado':tipo or 'desconhecido'}
+    chave=_pick(ev,'checkout_link','id','cart_id','email')+'|'+_pick(ev,'product_id','Product.product_id','product.id')
+    if chave in VISTOS: return {'ok':True,'duplicado':True}
+    VISTOS[chave]=1
+    while len(VISTOS)>500: VISTOS.popitem(last=False)
+    nome=_pick(ev,'name','full_name','Customer.full_name','customer.name'); tel=_pick(ev,'phone','mobile','Customer.mobile','customer.phone')
+    email=_pick(ev,'email','Customer.email','customer.email'); prod=_pick(ev,'product_name','Product.product_name','product.name')
+    st=_wa_enviar([nome,tel,prod,email,'carrinho abandonado'])
+    log({'t':time.time(),'modo':'webhook-kiwify','evento':tipo,'envio':st,'campos':sorted(ev.keys())})  # só os nomes dos campos, sem dados da cliente
+    return {'ok':True,'envio':st}
+
 @app.post('/api/feedback')
 def feedback(f:Fb):
     if not acesso(f.code): raise HTTPException(401)
