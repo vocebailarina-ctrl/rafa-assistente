@@ -91,7 +91,7 @@ def tel_br(x):
     if d.startswith('55') and len(d)==13: d=d[2:]
     if len(d)!=11 or d[0]=='0' or d[1]=='0' or d[2]!='9': return None   # celular brasileiro: DDD + 9 + 8 dígitos
     return '55'+d
-CANAIS={'instagram','site','exassinantes','assinantes','teste-claude'}
+CANAIS={'instagram','site','exassinantes','assinantes','teste-claude','pesquisa'}
 def _canal(x):
     """Canal do link (?c=): minúsculas, sem pontuação; só aceita a lista fixa, o resto vira 'outro' (vazio = 'site')."""
     c=re.sub(r'[^a-z0-9_-]','',(x or '').lower())[:30]
