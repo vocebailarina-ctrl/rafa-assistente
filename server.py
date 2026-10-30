@@ -238,7 +238,11 @@ def _wa_enviar(vars5):
 @app.get('/admin/testar-aviso')
 def testar_aviso(code:str=''):
     if not _admin_ok(code): raise HTTPException(401)
-    return {'envio':_wa_enviar(['Teste','-','Teste do aviso','-','teste'])}
+    r=_wa_enviar(['Teste','-','Teste do aviso','-','teste'])
+    if r=='sem_config':  # diagnóstico: só nomes e se está vazio, nunca os valores
+        return {'envio':r,'faltando':[k for k in ('WA_TOKEN','WA_PHONE_ID','AVISO_TEL') if not re.sub(r'\D','',os.environ.get(k,'')) and k!='WA_TOKEN' or (k=='WA_TOKEN' and not os.environ.get(k,'').strip())],
+                'nomes_parecidos':sorted(repr(k) for k in os.environ if k.upper().startswith(('WA','AVISO','WHATS')))}
+    return {'envio':r}
 @app.post('/webhook/kiwify')
 async def webhook_kiwify(request:Request):
     raw=await request.body()
