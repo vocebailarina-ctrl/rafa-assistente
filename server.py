@@ -216,16 +216,29 @@ def _pick(d,*keys):
         if cur not in (None,''): return str(cur)
     return ''
 def _wa_enviar(vars5):
+    # AVISO_MODO=texto envia texto comum (vale só dentro da janela de 24h aberta por uma mensagem recebida); padrão: template aprovado.
     tok=os.environ.get('WA_TOKEN',''); pid=os.environ.get('WA_PHONE_ID',''); to=re.sub(r'\D','',os.environ.get('AVISO_TEL',''))
-    tpl=os.environ.get('AVISO_TEMPLATE',''); lang=os.environ.get('AVISO_LANG','pt_BR')
-    if not (tok and pid and to and tpl): return 'sem_config'
-    body={'messaging_product':'whatsapp','to':to,'type':'template','template':{'name':tpl,'language':{'code':lang},
-          'components':[{'type':'body','parameters':[{'type':'text','text':(v or '-')[:200]} for v in vars5]}]}}
+    tpl=os.environ.get('AVISO_TEMPLATE',''); lang=os.environ.get('AVISO_LANG','pt_BR'); modo=os.environ.get('AVISO_MODO','template')
+    if modo=='texto':
+        if not (tok and pid and to): return 'sem_config'
+        nome,tel,prod,email,tipo=[(v or '-')[:200] for v in vars5]
+        body={'messaging_product':'whatsapp','to':to,'type':'text','text':{'body':f'Aviso VB: {tipo}\nNome: {nome}\nTelefone: {tel}\nProduto: {prod}\nE-mail: {email}'}}
+    else:
+        if not (tok and pid and to and tpl): return 'sem_config'
+        body={'messaging_product':'whatsapp','to':to,'type':'template','template':{'name':tpl,'language':{'code':lang},
+              'components':[{'type':'body','parameters':[{'type':'text','text':(v or '-')[:200]} for v in vars5]}]}}
     req=urllib.request.Request(f'https://graph.facebook.com/v21.0/{pid}/messages',data=json.dumps(body).encode(),
         headers={'Authorization':'Bearer '+tok,'Content-Type':'application/json'})
     try:
         urllib.request.urlopen(req,timeout=15).read(); return 'enviado'
+    except urllib.error.HTTPError as e:
+        try: er=json.loads(e.read().decode()).get('error',{}); return f"erro:HTTP{e.code}:cod{er.get('code')}:{str(er.get('message',''))[:80]}"
+        except Exception: return f'erro:HTTP{e.code}'
     except Exception as e: return 'erro:'+type(e).__name__
+@app.get('/admin/testar-aviso')
+def testar_aviso(code:str=''):
+    if not _admin_ok(code): raise HTTPException(401)
+    return {'envio':_wa_enviar(['Teste','-','Teste do aviso','-','teste'])}
 @app.post('/webhook/kiwify')
 async def webhook_kiwify(request:Request):
     raw=await request.body()
