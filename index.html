@@ -56,6 +56,7 @@ button.send:disabled{opacity:.5}
     <button class="send" style="padding:10px" onclick="entrar()">Entrar</button>
     <p id="gateerr" style="color:var(--bad)"></p>
     <p style="text-align:center;margin:6px 0"><a href="#" id="lnkteste" onclick="document.getElementById('formteste').style.display='flex';this.hidden=true;return false">Ainda não sou assinante: quero testar por 24 horas</a></p>
+    <p style="text-align:center;margin:0;font-size:.85rem">A Rafa Assistente está inclusa na assinatura do Você Bailarina, sem custo extra.</p>
     <div id="formteste" style="display:none;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:10px" >
       <p style="margin:0"><b>Teste gratuito de 24 horas</b> (números do Brasil). Cada WhatsApp pode testar uma vez.</p>
       <input id="tnome" placeholder="Seu nome" autocomplete="name">
@@ -100,7 +101,7 @@ async function entrar(){const nome=document.getElementById('nome').value.trim(),
   if(v==='falha'){err.textContent='Não consegui conferir agora. Verifique a internet e tente de novo.';return}
   err.textContent='';S.nome=nome;S.code=code;try{localStorage.setItem('rafa_s',JSON.stringify(S))}catch(e){}
   start();}
-const MSG_FIM_TESTE='Seu teste de 24 horas terminou. Para continuar com a Rafa Assistente, conheça a assinatura: vocebailarina.com/assinatura';
+const MSG_FIM_TESTE='Seu teste de 24 horas terminou. Para continuar com a Rafa Assistente, assine o Você Bailarina: ela já está inclusa na assinatura, sem custo extra: vocebailarina.com/assinatura';
 async function testar(){const err=document.getElementById('testeerr'),nome=document.getElementById('tnome').value.trim(),w=document.getElementById('twhats').value.trim(),ac=document.getElementById('taceite').checked;
   if(!nome||!w){err.textContent='Preencha nome e WhatsApp.';return}
   if(!ac){err.textContent='Marque que aceita receber contato para começar.';return}

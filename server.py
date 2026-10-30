@@ -146,8 +146,8 @@ def teste(t:Teste,request:Request):
     try: r=reivindicar(tel,nome,_canal(t.canal))
     except Exception as e:
         log({'erro_teste':str(e)}); raise HTTPException(503,'Não consegui registrar seu teste agora. Tente de novo em um minuto.')
-    if r=='ja_usado': raise HTTPException(409,'Esse WhatsApp já usou o teste gratuito. Para continuar, conheça a assinatura: vocebailarina.com/assinatura')
-    if r=='teto': raise HTTPException(429,'Os testes de hoje acabaram. Volte amanhã ou conheça a assinatura: vocebailarina.com/assinatura')
+    if r=='ja_usado': raise HTTPException(409,'Esse WhatsApp já usou o teste gratuito. Para continuar, assine o Você Bailarina: a Rafa Assistente já está inclusa na assinatura, sem custo extra: vocebailarina.com/assinatura')
+    if r=='teto': raise HTTPException(429,'Os testes de hoje acabaram. Volte amanhã ou assine o Você Bailarina: a Rafa Assistente já está inclusa na assinatura: vocebailarina.com/assinatura')
     log({'teste_entrada':True,'nome':nome,'tel_final':tel[-4:],'canal':t.canal or ''})
     return {'token':emitir_token(tel),'horas':TRIAL_H}
 
@@ -160,7 +160,7 @@ def chat(m:Msg):
     day=dt.date.today().isoformat(); k=(m.session,day)
     TIPO.set('teste' if isinstance(ac,tuple) else 'assinante'); TEL.set(ac[1] if isinstance(ac,tuple) else None)
     if isinstance(ac,tuple):
-        if USAGE_T[ac[1]]>=MAXT: return {'turn':None,'resposta':f'Chegamos ao fim das {MAXT} perguntas do seu teste gratuito. Para continuar com a Rafa Assistente, conheça a assinatura do Você Bailarina: vocebailarina.com/assinatura. Qualquer dúvida, fale com a Thay no {SUPORTE}.','fontes':[]}
+        if USAGE_T[ac[1]]>=MAXT: return {'turn':None,'resposta':f'Chegamos ao fim das {MAXT} perguntas do seu teste gratuito. Para continuar com a Rafa Assistente, assine o Você Bailarina: ela já está inclusa na assinatura, sem custo extra, neste período de lançamento: vocebailarina.com/assinatura. Qualquer dúvida, fale com a Thay no {SUPORTE}.','fontes':[]}
         USAGE_T[ac[1]]+=1
     elif USAGE[k]>=MAXD: return {'turn':None,'resposta':f'Por hoje chegamos ao limite de perguntas deste teste. Amanhã eu volto! Se for urgente, fale com a Thay no {SUPORTE}.','fontes':[]}
     USAGE[k]+=1
